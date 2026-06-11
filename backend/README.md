@@ -1,112 +1,144 @@
-# BLE Sense - Backend API Server
+# BLE Sense - FastAPI Backend API Server
 
-This branch hosts the **BLE Sense Backend API Server**, the central data ingestion and storage hub of the BLE Sense Ecosystem. Built with Node.js, Express, and MongoDB, this server receives telemetry packets from the mobile application, persists them, and serves them to the web dashboard.
-
----
-
-## ⚙️ Features
-
-- **Data Ingestion API:** Receives single packets or high-throughput bulk arrays of BLE sensor data.
-- **Robust Storage System:** Uses **MongoDB** (via Mongoose) for long-term telemetry storage.
-- **Graceful Fallback:** Auto-detects if MongoDB is unavailable and transparently falls back to an **in-memory database store** (perfect for quick local tests without setup).
-- **CORS Enabled:** Ready to communicate with any frontend client or web dashboard.
-- **Nodemon Integration:** Auto-restarting development server for rapid iteration.
+This directory contains the modernized **BLE Sense Backend API Server**, rewritten in Python using **FastAPI** with **PostgreSQL** as the database. It provides secure JWT-based user authentication, role-based access control (RBAC), automatic email integration via Gmail SMTP, and database migration tracking via **Alembic**.
 
 ---
 
-## 🚀 Getting Started
+## 🏗️ Architecture & Features
 
-This branch contains only the Node.js project. You can run it locally or deploy it to cloud hosting.
-
-### Prerequisites
-- [Node.js](https://nodejs.org/) (v18.0.0 or newer recommended)
-- [MongoDB Community Server](https://www.mongodb.com/try/download/community) (Optional - the server will fall back to in-memory storage if MongoDB is not running)
-
-### Installation
-1. Clone this branch directly:
-   ```bash
-   git clone -b backend https://github.com/SaurabhSphere/BLE-Sensor.git
-   ```
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-### Running the Server
-* **Development Mode** (with hot-reloading):
-  ```bash
-  npm run dev
-  ```
-* **Production Mode**:
-  ```bash
-  node server.js
-  ```
+- **High Performance:** Built on top of **FastAPI** (Python 3.10+) and Starlette for asynchronous speed.
+- **Relational Storage:** Connected to **PostgreSQL** using the **SQLAlchemy ORM** for query building.
+- **Database Migrations:** Programmatic schema evolution with **Alembic**.
+- **Secure Authentication:** User verification and login utilizing **JSON Web Tokens (JWT)** and **bcrypt** secure password hashing.
+- **Gmail SMTP Integration:** Sends email verifications, password resets, and user invitations via background tasks to avoid blocking web traffic.
+- **Role Permissions:** Access control preventing non-admin users from viewing list registry or promoting other users to administrators.
+- **Default Admin Account:** Automatically seeds a default administrator on server startup if no admin exists.
 
 ---
 
-## 📝 Configuration (.env)
+## 📂 Project Structure
 
-Create a `.env` file in the root of the server directory to configure your ports and database:
-
-```env
-PORT=5000
-MONGODB_URI=mongodb://localhost:27017/ble-sensor
+```
+backend/
+├── app/
+│   ├── main.py            # Application entry point, lifespan, & admin seed
+│   ├── config.py          # Environment settings loader (Pydantic)
+│   ├── database.py        # SQLAlchemy engine and session setup
+│   ├── security.py        # Password hashing & JWT generation
+│   ├── models/
+│   │   └── user.py        # User table schema
+│   ├── schemas/
+│   │   └── user.py        # Pydantic serialization models
+│   ├── routers/
+│   │   ├── deps.py        # Route dependency guards (auth check)
+│   │   ├── auth.py        # Registration, login, reset, & verify API
+│   │   └── users.py       # Password change & admin endpoints
+│   └── services/
+│       └── email.py       # Gmail SMTP helper & HTML templates
+├── alembic/               # Migration scripts environment
+├── alembic.ini            # Alembic configuration
+├── requirements.txt       # Dependencies manifest
+└── .env                   # Configuration file (ignored by git)
 ```
 
 ---
 
-## 📡 API Endpoints
+## 🚀 Installation & Setup
 
-### 1. Root / Health Status
-- **`GET /`**
-  - Returns a simple HTML status page.
-- **`GET /api/health`**
-  - Returns a JSON payload showing server health.
-  - **Response:**
-    ```json
-    { "status": "OK", "message": "Backend is running" }
-    ```
+### 1. Prerequisites
+- **Python 3.10 or newer**
+- **PostgreSQL Server** running locally or a connection string to a remote instance.
 
-### 2. Sensor Packets Ingestion
-- **`POST /api/packets`**
-  - Receives telemetry data from the Mobile App. Supports single JSON packets or JSON arrays.
-  - **Headers:** `Content-Type: application/json`
-  - **Example Payload:**
-    ```json
-    {
-      "timestamp": "2026-06-10T17:42:00Z",
-      "data": {
-        "appId": "BLE-Sense-1",
-        "temperature": 24.5,
-        "humidity": 48.2,
-        "battery": 88
-      }
-    }
-    ```
+### 2. Create Virtual Environment
+Open a terminal in the `backend/` directory:
+```bash
+python -m venv venv
 
-### 3. Fetch Packets
-- **`GET /api/packets`**
-  - Fetches the last 100 received sensor packets, sorted by newest first.
-  - **Response:**
-    ```json
-    [
-      {
-        "_id": "648c66e2c34a1b0012abcde5",
-        "appId": "BLE-Sense-1",
-        "data": {
-          "temperature": 24.5,
-          "humidity": 48.2,
-          "battery": 88
-        },
-        "timestamp": "2026-06-10T17:42:00.000Z"
-      }
-    ]
-    ```
+# On Windows (cmd):
+venv\Scripts\activate
+# On Windows (PowerShell):
+.\venv\Scripts\activate
+# On macOS/Linux:
+source venv/bin/activate
+```
+
+### 3. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Configure Environment (`.env`)
+Create a `.env` file in the `backend/` directory:
+```env
+PORT=8000
+HOST=0.0.0.0
+
+# Database Connection
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/blesense
+
+# Security Keys
+SECRET_KEY=your_secure_random_hex_key_here
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+
+# Gmail SMTP Email Setup
+# IMPORTANT: Generate a 16-character App Password on your Google account.
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=your-email@gmail.com
+SMTP_PASSWORD=xxxx-xxxx-xxxx-xxxx
+SMTP_FROM_EMAIL=your-email@gmail.com
+SMTP_FROM_NAME=BLE Sense Ecosystem
+
+# Seed Administrator Account
+DEFAULT_ADMIN_USERNAME=saurabh
+DEFAULT_ADMIN_EMAIL=thedev.saurabh@gmail.com
+DEFAULT_ADMIN_PASSWORD=AdminChangeMe123!
+
+# Frontend Address (for email verification & reset redirects)
+FRONTEND_URL=http://localhost:5173
+```
 
 ---
 
-## 🛠️ Tech Stack
-- **Runtime:** Node.js
-- **Framework:** Express.js
-- **Database Wrapper:** Mongoose (MongoDB)
-- **Utilities:** cors, dotenv, nodemon
+## 🗄️ Database Migrations (Alembic)
+
+Once your database is running and configuration is complete in `.env`, run the following commands to create and apply the database tables:
+
+1. **Initialize the migration revision:**
+   ```bash
+   alembic revision --autogenerate -m "Initial migrations"
+   ```
+2. **Apply migrations to the database:**
+   ```bash
+   alembic upgrade head
+   ```
+
+---
+
+## 🏃 Running the Application
+
+Start the development server:
+```bash
+uvicorn app.main:app --reload
+```
+
+The application will run by default at `http://localhost:8000`.
+- **Swagger Interactive API Documentation:** [http://localhost:8000/docs](http://localhost:8000/docs)
+- **ReDoc Alternative Documentation:** [http://localhost:8000/redoc](http://localhost:8000/redoc)
+
+---
+
+## 📡 API Reference Summary
+
+### Authentication Routes (`/api/auth`)
+* `POST /api/auth/register` - Registers a new user. Sends verification email.
+* `GET /api/auth/verify-email?token=...` - API verify callback. Activates account.
+* `POST /api/auth/login` - Authenticates user. Returns JWT Access Token.
+* `POST /api/auth/forgot-password` - Generates reset token and sends email link.
+* `POST /api/auth/reset-password` - Resets password using the received token.
+
+### User Profile & Management Routes (`/api/users`)
+* `POST /api/users/change-password` - Updates the current user's password (requires auth).
+* `GET /api/users/` - Lists all registered users (**Admin only**).
+* `POST /api/users/{user_id}/promote` - Grants administrator status to a user (**Admin only**).
