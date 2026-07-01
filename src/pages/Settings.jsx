@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
-const Settings = ({ apiUrl, updateApiUrl, token, showNotification }) => {
+const Settings = ({ apiUrl, token, showNotification }) => {
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [settingsApiUrl, setSettingsApiUrl] = useState(apiUrl);
   const [loading, setLoading] = useState(false);
 
   const handleChangePassword = async (e) => {
@@ -58,30 +57,6 @@ const Settings = ({ apiUrl, updateApiUrl, token, showNotification }) => {
             {loading ? 'Updating...' : 'Save Password'}
           </button>
         </form>
-      </div>
-
-      {/* Environment settings */}
-      <div className="settings-card glassmorphism">
-        <h3>API Network Configuration</h3>
-        <div className="settings-form">
-          <div className="form-group">
-            <label>API Host Gateway URL</label>
-            <input 
-              type="text" 
-              required 
-              placeholder="http://localhost:8000" 
-              value={settingsApiUrl}
-              onChange={(e) => setSettingsApiUrl(e.target.value)}
-            />
-          </div>
-          <button 
-            type="button" 
-            onClick={() => updateApiUrl(settingsApiUrl)} 
-            className="btn-settings-save"
-          >
-            Save Connection URL
-          </button>
-        </div>
       </div>
     </div>
   );

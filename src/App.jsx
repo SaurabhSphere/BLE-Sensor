@@ -34,7 +34,7 @@ function App() {
   const [viewMode, setViewMode] = useState('overview'); // 'overview', 'graph', 'queue', 'datalogger', 'admin', 'settings'
   const [authView, setAuthView] = useState('login'); // 'login', 'register', 'forgot-password', 'reset-password'
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
-  const [apiUrl, setApiUrl] = useState(localStorage.getItem('api_url') || 'http://localhost:8000');
+  const [apiUrl, setApiUrl] = useState('https://ble-sensor.onrender.com');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(localStorage.getItem('sidebar_collapsed') === 'true');
 
   const toggleSidebar = () => {
@@ -120,12 +120,7 @@ function App() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  // Set API Url
-  const updateApiUrl = (newUrl) => {
-    localStorage.setItem('api_url', newUrl);
-    setApiUrl(newUrl);
-    showNotification('success', `API URL updated to: ${newUrl}`);
-  };
+
 
   // Helper for displaying notifications
   const showNotification = (type, message) => {
@@ -317,14 +312,7 @@ function App() {
               />
             )}
             
-            <div className="auth-api-override">
-              <label>API Endpoint:</label>
-              <input 
-                type="text" 
-                value={apiUrl} 
-                onChange={(e) => updateApiUrl(e.target.value)} 
-              />
-            </div>
+
           </div>
         )}
       </div>
@@ -415,7 +403,6 @@ function App() {
           {viewMode === 'settings' && (
             <Settings 
               apiUrl={apiUrl}
-              updateApiUrl={updateApiUrl}
               token={token}
               showNotification={showNotification}
             />
