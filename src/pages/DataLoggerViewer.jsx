@@ -194,7 +194,7 @@ const DataLoggerViewer = ({
                 </div>
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between' }}>
                   <span>{new Date(p.timestamp).toLocaleTimeString()}</span>
-                  <span style={{ fontWeight: 600 }}>80 XYZ Coordinates</span>
+                  {/* <span style={{ fontWeight: 600 }}>80 XYZ Coordinates</span> */}
                 </div>
               </div>
             );

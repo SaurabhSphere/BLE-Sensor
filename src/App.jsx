@@ -161,11 +161,11 @@ function App() {
       ]);
       
       const generalPackets = response.data.map(pkt => {
-        let sensorType = 'Unknown';
-        const payload = pkt.data;
-        const innerData = payload.data || {};
+        const payload = pkt.data || {};
+        const innerData = payload.data || payload;
 
-        if (innerData.points) sensorType = 'DataLogger';
+        let sensorType = 'Unknown';
+        if (innerData.type === 'DataLogger' || innerData.points || innerData.deviceId) sensorType = 'DataLogger';
         else if (innerData.temperature && innerData.humidity) sensorType = 'SHT40';
         else if (innerData.nitrogen || innerData.phosphorus) sensorType = 'Soil Sensor';
         else if (innerData.co2 || innerData.pm25) sensorType = 'sen66';
@@ -174,12 +174,12 @@ function App() {
 
         return {
           ...pkt,
-          appId: pkt.appId || innerData.appId || 'Unknown',
+          appId: pkt.appId || innerData.appId || payload.appId || 'Unknown',
           type: sensorType,
           displayData: innerData,
           timestamp: pkt.timestamp || payload.timestamp
         };
-      });
+      }).filter(pkt => pkt.type !== 'DataLogger');
 
       // Transform relational DataLogger records into same unified shape for Overview
       const dlPackets = dlResponse.data.map(pkt => {
