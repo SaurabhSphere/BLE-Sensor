@@ -63,21 +63,21 @@ const SensorChart = ({ data }) => {
 
   // Safety fallback if no numeric data found
   if (dataKeys.length === 0) {
-    return <div style={{ color: '#fff' }}>Receiving data, but no numeric sensor metrics found to chart yet.</div>;
+    return <div style={{ color: 'var(--text-main)' }}>Receiving data, but no numeric sensor metrics found to chart yet.</div>;
   }
 
   return (
     <div style={{ width: '100%', height: 400 }}>
       <ResponsiveContainer>
         <LineChart data={formattedData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-          <XAxis dataKey="name" stroke="#ccc" />
-          <YAxis stroke="#ccc" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--card-border)" />
+          <XAxis dataKey="name" stroke="var(--text-secondary)" />
+          <YAxis stroke="var(--text-secondary)" />
           <Tooltip 
-            contentStyle={{ backgroundColor: '#1e1e1e', borderColor: '#333', color: '#fff' }}
-            itemStyle={{ color: '#fff' }}
+            contentStyle={{ backgroundColor: 'var(--bg-sidebar)', borderColor: 'var(--card-border)', color: 'var(--text-main)', borderRadius: '8px' }}
+            itemStyle={{ color: 'var(--text-main)' }}
           />
-          <Legend wrapperStyle={{ color: '#ccc' }} />
+          <Legend wrapperStyle={{ color: 'var(--text-secondary)' }} />
           {dataKeys.map((key, index) => (
             <Line 
               key={key}

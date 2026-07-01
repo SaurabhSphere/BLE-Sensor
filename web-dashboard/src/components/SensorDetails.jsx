@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 
 const parseRawDataToChunks = (rawData) => {
   if (!rawData || typeof rawData !== 'string') return [];
@@ -58,6 +58,13 @@ const parseRawDataToChunks = (rawData) => {
 };
 
 const SensorDetails = ({ sensor, onClose }) => {
+  const [selectedChunk, setSelectedChunk] = useState(0);
+
+  // Reset selected chunk when sensor changes
+  useEffect(() => {
+    setSelectedChunk(0);
+  }, [sensor]);
+
   if (!sensor) return null;
 
   const data = sensor.displayData || sensor.data;
@@ -68,7 +75,6 @@ const SensorDetails = ({ sensor, onClose }) => {
       case 'DataLogger': {
         const rawData = data.rawData || '';
         const chunks = parseRawDataToChunks(rawData);
-        const [selectedChunk, setSelectedChunk] = useState(0);
 
         const handleCopyRaw = () => {
           navigator.clipboard.writeText(rawData);
@@ -106,9 +112,9 @@ const SensorDetails = ({ sensor, onClose }) => {
                   style={{
                     padding: '8px 16px',
                     borderRadius: '6px',
-                    background: selectedChunk === i ? 'var(--accent-primary)' : 'rgba(255,255,255,0.1)',
+                    background: selectedChunk === i ? 'var(--accent-teal)' : 'var(--input-bg)',
                     border: 'none',
-                    color: '#fff',
+                    color: selectedChunk === i ? '#fff' : 'var(--text-main)',
                     cursor: 'pointer',
                     fontWeight: 'bold'
                   }}
@@ -120,19 +126,19 @@ const SensorDetails = ({ sensor, onClose }) => {
 
             {/* Metadata */}
             <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '8px' }}>
-              <h4 style={{ marginTop: 0, color: 'var(--text-secondary)' }}>CHUNK {chunk.chunkIndex + 1} METADATA</h4>
+              <h4 style={{ marginTop: 0, color: 'var(--text-secondary)' }}>FRAME {chunk.chunkIndex + 1} TELEMETRY METADATA</h4>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div><strong style={{ color: 'var(--text-secondary)' }}>Packet ID:</strong> {chunk.packetId}</div>
-                <div><strong style={{ color: 'var(--text-secondary)' }}>Last Saved:</strong> {chunk.lastSavedPacketId}</div>
-                <div><strong style={{ color: 'var(--text-secondary)' }}>Device ID:</strong> 0x{chunk.deviceId.toString(16).padStart(2, '0').toUpperCase()}</div>
-                <div><strong style={{ color: 'var(--text-secondary)' }}>Footer:</strong> 0x{chunk.footer.toString(16).padStart(2, '0').toUpperCase()}</div>
+                <div><strong style={{ color: 'var(--text-secondary)' }}>Batch ID:</strong> {chunk.packetId}</div>
+                <div><strong style={{ color: 'var(--text-secondary)' }}>Previous Batch ID:</strong> {chunk.lastSavedPacketId}</div>
+                <div><strong style={{ color: 'var(--text-secondary)' }}>Node Address:</strong> 0x{chunk.deviceId.toString(16).padStart(2, '0').toUpperCase()}</div>
+                <div><strong style={{ color: 'var(--text-secondary)' }}>Checksum:</strong> 0x{chunk.footer.toString(16).padStart(2, '0').toUpperCase()}</div>
               </div>
             </div>
 
             {/* XYZ Points Grid */}
             <div className="points-grid">
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ color: 'var(--text-secondary)', fontWeight: 'bold' }}>XYZ SAMPLES</span>
+                <span style={{ color: 'var(--text-secondary)', fontWeight: 'bold' }}>XYZ SPATIAL COORDINATES</span>
                 <span style={{ fontFamily: 'monospace', color: 'var(--accent-primary)' }}>#{pointOffset + 1} – #{pointOffset + 80}</span>
               </div>
               <div className="grid-header" style={{ display: 'grid', gridTemplateColumns: '50px 1fr 1fr 1fr', gap: '10px', padding: '8px', background: 'rgba(255,255,255,0.1)' }}>
@@ -156,8 +162,8 @@ const SensorDetails = ({ sensor, onClose }) => {
             {/* Hex Viewer */}
             <div style={{ background: 'rgba(0,0,0,0.3)', padding: '15px', borderRadius: '8px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                <span style={{ color: 'var(--text-secondary)', fontWeight: 'bold' }}>CHUNK HEX (246 bytes)</span>
-                <button onClick={handleCopyChunk} className="btn-secondary" style={{ padding: '4px 10px', fontSize: '0.8rem' }}>Copy Chunk</button>
+                <span style={{ color: 'var(--text-secondary)', fontWeight: 'bold' }}>FRAME BINARY HEX (246 bytes)</span>
+                <button onClick={handleCopyChunk} className="btn-secondary" style={{ padding: '4px 10px', fontSize: '0.8rem' }}>Copy Frame Hex</button>
               </div>
               <div style={{ fontFamily: 'monospace', fontSize: '0.85rem', wordBreak: 'break-all', color: '#4ECDC4', maxHeight: '100px', overflowY: 'auto' }}>
                 {chunk.rawHex}
@@ -165,27 +171,59 @@ const SensorDetails = ({ sensor, onClose }) => {
             </div>
 
             <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'flex-end' }}>
-              <button onClick={handleCopyRaw} className="btn-primary" style={{ padding: '8px 16px' }}>Copy Full Raw Data</button>
+              <button onClick={handleCopyRaw} className="btn-primary" style={{ padding: '8px 16px' }}>Copy Binary Stream</button>
             </div>
 
           </div>
         );
       }
-      case 'SHT40':
+      case 'SHT40': {
+        const t = data.temperature;
+        const rh = data.humidity;
+        const thi = (t !== undefined && rh !== undefined)
+          ? 0.8 * t + (rh / 100) * (t - 14.4) + 46.4
+          : null;
+        
+        const thiLimit = parseFloat(localStorage.getItem('thi_threshold') || '72');
+        const diff = thiLimit - 72;
+
+        let thiLabel = 'Optimal (No Stress)';
+        let thiColor = 'var(--accent-teal)';
+        if (thi >= 84 + diff) { thiLabel = 'Severe Heat Stress'; thiColor = '#FF6B6B'; }
+        else if (thi >= 79 + diff) { thiLabel = 'Moderate Heat Stress'; thiColor = '#ffc658'; }
+        else if (thi >= thiLimit) { thiLabel = 'Mild Heat Stress'; thiColor = '#82ca9d'; }
+
         return (
-          <div className="sht40-details">
+          <div className="sht40-details" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
             <div className="stats-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
               <div className="sensor-card" style={{ border: 'none' }}>
                 <div className="sensor-label">Temperature</div>
-                <div className="sensor-value" style={{ color: 'var(--accent-secondary)' }}>{data.temperature}°C</div>
+                <div className="sensor-value" style={{ color: 'var(--accent-secondary)' }}>{t}°C</div>
               </div>
               <div className="sensor-card" style={{ border: 'none' }}>
-                <div className="sensor-label">Humidity</div>
-                <div className="sensor-value" style={{ color: 'var(--accent-primary)' }}>{data.humidity}%</div>
+                <div className="sensor-label">Relative Humidity</div>
+                <div className="sensor-value" style={{ color: 'var(--accent-primary)' }}>{rh}%</div>
               </div>
             </div>
+            {thi !== null && (
+              <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '8px', borderLeft: `4px solid ${thiColor}` }}>
+                <h4 style={{ marginTop: 0, color: 'var(--text-secondary)' }}>CATTLE HEAT STRESS STATUS</h4>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <strong>Temperature Humidity Index (THI):</strong> {thi.toFixed(1)}
+                  </div>
+                  <span style={{ color: thiColor, fontWeight: 'bold', fontSize: '0.9rem', textTransform: 'uppercase' }}>
+                    {thiLabel}
+                  </span>
+                </div>
+                <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                  Threshold values based on veterinary research: THI ≥ 72 indicates onset of heat stress in dairy livestock, affecting milk production and rumination behavior.
+                </p>
+              </div>
+            )}
           </div>
         );
+      }
       case 'Soil Sensor':
         return (
           <div className="soil-details">
@@ -220,8 +258,8 @@ const SensorDetails = ({ sensor, onClose }) => {
                 { label: 'CO2', value: data.co2, unit: 'ppm' },
                 { label: 'VOC', value: data.voc, unit: '' },
                 { label: 'NOx', value: data.nox, unit: '' },
-                { label: 'Temp', value: data.temperature, unit: '°C' },
-                { label: 'RH', value: data.humidity, unit: '%' }
+                { label: 'Temperature', value: data.temperature, unit: '°C' },
+                { label: 'Relative Humidity', value: data.humidity, unit: '%' }
               ].map(item => (
                 <div key={item.label} className="sensor-card" style={{ border: 'none', padding: '1rem' }}>
                   <div className="sensor-label">{item.label}</div>
@@ -231,6 +269,48 @@ const SensorDetails = ({ sensor, onClose }) => {
             </div>
           </div>
         );
+      case 'Ammonia Sensor': {
+        const nh3 = parseFloat(data.ammonia);
+        const ammoniaLimit = parseFloat(localStorage.getItem('ammonia_threshold') || '25');
+        
+        let statusLabel = 'Optimal';
+        let statusColor = 'var(--accent-teal)';
+        let desc = 'Ammonia level is well within safe thresholds for livestock housing.';
+        if (nh3 >= ammoniaLimit) {
+          statusLabel = 'Hazardous (Action Required)';
+          statusColor = '#FF6B6B';
+          desc = `Concentration exceeds critical limit of ${ammoniaLimit} ppm. Chronic exposure leads to respiratory tract irritation, increased susceptibility to pathogens, and reduced livestock productivity.`;
+        } else if (nh3 >= ammoniaLimit * 0.4) {
+          statusLabel = 'Acceptable (Monitoring Advised)';
+          statusColor = '#ffc658';
+          desc = `Barn ammonia level is elevated (exceeds ${ammoniaLimit * 0.4} ppm) but acceptable. Ensure adequate ventilation exchange.`;
+        }
+
+        return (
+          <div className="ammonia-details" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            <div className="stats-grid" style={{ gridTemplateColumns: '1fr' }}>
+              <div className="sensor-card" style={{ border: 'none' }}>
+                <div className="sensor-label">Ammonia Gas (NH₃) Concentration</div>
+                <div className="sensor-value" style={{ color: 'var(--accent-primary)' }}>{data.ammonia} ppm</div>
+              </div>
+            </div>
+            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '8px', borderLeft: `4px solid ${statusColor}` }}>
+              <h4 style={{ marginTop: 0, color: 'var(--text-secondary)' }}>AIR QUALITY ASSESSMENT</h4>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <strong>Housing Air Status:</strong>
+                </div>
+                <span style={{ color: statusColor, fontWeight: 'bold', fontSize: '0.9rem', textTransform: 'uppercase' }}>
+                  {statusLabel}
+                </span>
+              </div>
+              <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                {desc}
+              </p>
+            </div>
+          </div>
+        );
+      }
       default:
         return (
           <div className="raw-json">

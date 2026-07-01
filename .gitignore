@@ -48,3 +48,28 @@ logs/
 .parcel-cache/
 .eslintcache
 .turbo/
+
+# Python virtual environments
+venv/
+.venv/
+env/
+**/venv/
+**/.venv/
+**/env/
+
+# Python cache & compiled files
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local database files
+*.db
+*.sqlite
+*.sqlite3
+**/instance/
+
