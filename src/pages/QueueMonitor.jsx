@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api';
 
 const QueueMonitor = ({
   apiUrl,
@@ -23,7 +23,7 @@ const QueueMonitor = ({
   const handleReprocessPacket = async (packetId) => {
     try {
       if (setQueueLoading) setQueueLoading(true);
-      await axios.post(`${apiUrl}/api/packets/datalogger/${packetId}/reprocess`);
+      await api.post(`/api/packets/datalogger/${packetId}/reprocess`);
       showNotification('success', `Raw packet #${packetId} re-enqueued successfully.`);
       await fetchRawPackets();
     } catch (error) {

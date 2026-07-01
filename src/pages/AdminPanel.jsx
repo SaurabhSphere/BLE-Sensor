@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import axios from 'axios';
+import api from '../api';
 
 const DEFAULT_BOVINE_TAGS = {
   "11": { name: "Bovine #11", breed: "Murrah Buffalo", location: "Barn Sector A", weight: "480 kg", notes: "Lactation study subject A" },
@@ -43,9 +43,7 @@ const AdminPanel = ({ apiUrl, token, user, showNotification }) => {
     if (!token || !user?.is_superuser) return;
     try {
       setAdminLoading(true);
-      const response = await axios.get(`${apiUrl}/api/users/`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await api.get('/api/users/');
       setAllUsers(response.data);
     } catch (error) {
       showNotification('error', 'Failed to retrieve user directory.');
@@ -53,16 +51,42 @@ const AdminPanel = ({ apiUrl, token, user, showNotification }) => {
       setAdminLoading(false);
     }
   };
-
   const handlePromoteAdmin = async (userId) => {
     try {
-      await axios.post(`${apiUrl}/api/users/${userId}/promote`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.post(`/api/users/${userId}/promote`, {});
       showNotification('success', 'User access level updated to Administrator.');
       fetchAllUsers();
     } catch (error) {
       const errorDetail = error.response?.data?.detail || 'Failed to update user privilege level.';
+      showNotification('error', errorDetail);
+    }
+  };
+
+  const handleDeleteUser = async (userId, username) => {
+    if (!window.confirm(`Are you sure you want to permanently delete user "${username}"?`)) {
+      return;
+    }
+    try {
+      await api.delete(`/api/users/${userId}`);
+      showNotification('success', `User "${username}" has been deleted.`);
+      fetchAllUsers();
+    } catch (error) {
+      const errorDetail = error.response?.data?.detail || 'Failed to delete user.';
+      showNotification('error', errorDetail);
+    }
+  };
+
+  const handleResendVerification = async (email, lastSent) => {
+    const formattedTime = lastSent ? new Date(lastSent).toLocaleString() : 'Never';
+    if (!window.confirm(`Last verification email was sent: ${formattedTime}.\n\nAre you sure you want to send a new verification link? All previous verification links will be disabled and become invalid.`)) {
+      return;
+    }
+    try {
+      await api.post('/api/auth/resend-verification', { email });
+      showNotification('success', `Verification link resent successfully to ${email}.`);
+      fetchAllUsers();
+    } catch (error) {
+      const errorDetail = error.response?.data?.detail || 'Failed to resend verification link.';
       showNotification('error', errorDetail);
     }
   };
@@ -320,17 +344,37 @@ const AdminPanel = ({ apiUrl, token, user, showNotification }) => {
                         </span>
                       </td>
                       <td>
-                        {!u.is_superuser ? (
-                          <button
-                            onClick={() => handlePromoteAdmin(u.id)}
-                            className="btn-promote"
-                            style={{ padding: '5px 10px', fontSize: '0.75rem', borderRadius: '6px' }}
-                          >
-                            Grant Admin
-                          </button>
-                        ) : (
-                          <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>System</span>
-                        )}
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          {!u.is_superuser && (
+                            <button
+                              onClick={() => handlePromoteAdmin(u.id)}
+                              className="btn-promote"
+                              style={{ padding: '5px 10px', fontSize: '0.75rem', borderRadius: '6px' }}
+                            >
+                              Grant Admin
+                            </button>
+                          )}
+                          {!u.is_verified && (
+                            <button
+                              onClick={() => handleResendVerification(u.email, u.verification_sent_at)}
+                              className="btn-promote"
+                              style={{ padding: '5px 10px', fontSize: '0.75rem', borderRadius: '6px', background: 'rgba(255, 198, 88, 0.1)', color: '#ffc658', border: '1px solid rgba(255, 198, 88, 0.3)' }}
+                            >
+                              Resend Verification
+                            </button>
+                          )}
+                          {u.id !== user.id ? (
+                            <button
+                              onClick={() => handleDeleteUser(u.id, u.username)}
+                              className="btn-danger"
+                              style={{ padding: '5px 10px', fontSize: '0.75rem', borderRadius: '6px', margin: 0 }}
+                            >
+                              Delete
+                            </button>
+                          ) : (
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>System (You)</span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

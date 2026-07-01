@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from './api';
 
 // Reusable Components
 import SensorDetails from './components/SensorDetails';
@@ -132,9 +132,7 @@ function App() {
   const fetchUserProfile = async (authToken) => {
     try {
       setAuthLoading(true);
-      const response = await axios.get(`${apiUrl}/api/users/me`, {
-        headers: { Authorization: `Bearer ${authToken}` }
-      });
+      const response = await api.get('/api/users/me');
       setUser(response.data);
     } catch (error) {
       console.error("Session verification failed:", error);
@@ -158,8 +156,8 @@ function App() {
     if (!token) return;
     try {
       const [response, dlResponse] = await Promise.all([
-        axios.get(`${apiUrl}/api/packets`),
-        axios.get(`${apiUrl}/api/packets/datalogger/processed?include_points=true`)
+        api.get('/api/packets'),
+        api.get('/api/packets/datalogger/processed?include_points=true')
       ]);
       
       const generalPackets = response.data.map(pkt => {
@@ -225,7 +223,7 @@ function App() {
   const fetchRawPackets = async () => {
     if (!token) return;
     try {
-      const response = await axios.get(`${apiUrl}/api/packets/datalogger/raw`);
+      const response = await api.get('/api/packets/datalogger/raw');
       setRawPackets(response.data);
     } catch (error) {
       console.error("Error fetching raw packets:", error);
@@ -271,7 +269,7 @@ function App() {
                   <path d="M6 3h12M18 3v3c0 2.2-1.8 4-4 4h-4c-2.2 0-4-1.8-4-4V3M5.5 21h13M8.5 10.5L3 21h18l-5.5-10.5" />
                 </svg>
               </div>
-              <h2>BLE Sensor Research Portal</h2>
+              <h2>BLE Sensor</h2>
             </div>
             
             {authView === 'login' && (

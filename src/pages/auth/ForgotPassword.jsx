@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import api from '../../api';
 
 const ForgotPassword = ({ apiUrl, setAuthView, showNotification }) => {
   const [email, setEmail] = useState('');
@@ -9,7 +9,7 @@ const ForgotPassword = ({ apiUrl, setAuthView, showNotification }) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await axios.post(`${apiUrl}/api/auth/forgot-password`, { email });
+      await api.post('/api/auth/forgot-password', { email });
       showNotification('success', 'If the email address is registered, verification credentials have been dispatched.');
       setAuthView('login');
     } catch (error) {
