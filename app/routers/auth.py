@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, 
 from fastapi.responses import HTMLResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone
 from app.database import get_db
 from app.models.user import User
-from app.schemas.user import UserCreate, UserOut, Token, ForgotPasswordRequest, ResetPasswordRequest
+from app.schemas.user import UserCreate, UserOut, Token, ForgotPasswordRequest, ResetPasswordRequest, ResendVerificationRequest, VerificationStatusResponse
 from app.security import get_password_hash, verify_password, create_access_token, generate_random_token
 from app.services.email import send_verification_email, send_password_reset_email
 from app.config import settings
@@ -47,7 +47,8 @@ def register_user(
         is_active=False,
         is_verified=False,
         is_superuser=False,
-        verification_token=verification_token
+        verification_token=verification_token,
+        verification_sent_at=datetime.now(timezone.utc)
     )
     
     db.add(new_user)
@@ -177,3 +178,89 @@ def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db))
     db.commit()
     
     return {"message": "Password has been reset successfully."}
+
+@router.get("/verification-status", response_model=VerificationStatusResponse)
+def get_verification_status(email: str, db: Session = Depends(get_db)):
+    """Check the verification status and last sent timestamp of a user by email."""
+    print(f"🔍 [DEBUG] get_verification_status endpoint triggered with email: {email}")
+    try:
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            print(f"❌ [DEBUG] User lookup failed for email: {email} (User not found)")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No account registered with this email address."
+            )
+        print(f"✓ [DEBUG] User found: username={user.username}, email={user.email}, is_verified={user.is_verified}, last_sent_at={user.verification_sent_at}")
+        return VerificationStatusResponse(
+            email=user.email,
+            is_verified=user.is_verified,
+            verification_sent_at=user.verification_sent_at
+        )
+    except HTTPException as he:
+        print(f"⚠️ [DEBUG] HTTPException in get_verification_status: {he.status_code} - {he.detail}")
+        raise he
+    except Exception as e:
+        print(f"💥 [DEBUG] Unexpected Exception in get_verification_status: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal Server Error in status lookup: {str(e)}"
+        )
+
+@router.post("/resend-verification")
+def resend_verification(
+    request: ResendVerificationRequest,
+    background_tasks: BackgroundTasks,
+    req_info: Request,
+    db: Session = Depends(get_db)
+):
+    """Generate a new verification token (disabling old ones) and send a new link."""
+    print(f"🔍 [DEBUG] resend_verification endpoint triggered for email: {request.email}")
+    try:
+        user = db.query(User).filter(User.email == request.email).first()
+        if not user:
+            print(f"❌ [DEBUG] User lookup failed for email: {request.email} (User not found)")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No account registered with this email address."
+            )
+        
+        if user.is_verified:
+            print(f"⚠️ [DEBUG] Resend aborted. User '{user.username}' is already verified.")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This account is already verified."
+            )
+            
+        new_token = generate_random_token()
+        user.verification_token = new_token
+        user.verification_sent_at = datetime.now(timezone.utc)
+        db.commit()
+        print(f"✓ [DEBUG] Database updated. Generated new token: {new_token}, verification_sent_at: {user.verification_sent_at}")
+        
+        verification_url = f"{req_info.base_url}api/auth/verify-email?token={new_token}"
+        background_tasks.add_task(
+            send_verification_email,
+            to_email=user.email,
+            username=user.username,
+            verification_url=verification_url
+        )
+        print(f"✉️ [DEBUG] Verification email background task enqueued for: {user.email}")
+        
+        return {
+            "message": "Verification link has been resent successfully.",
+            "verification_sent_at": user.verification_sent_at
+        }
+    except HTTPException as he:
+        print(f"⚠️ [DEBUG] HTTPException in resend_verification: {he.status_code} - {he.detail}")
+        raise he
+    except Exception as e:
+        print(f"💥 [DEBUG] Unexpected Exception in resend_verification: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal Server Error in resend process: {str(e)}"
+        )
