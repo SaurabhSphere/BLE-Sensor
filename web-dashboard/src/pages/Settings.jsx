@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import api from '../api';
 
 const Settings = ({ apiUrl, token, showNotification }) => {
   const [oldPassword, setOldPassword] = useState('');
@@ -10,9 +10,8 @@ const Settings = ({ apiUrl, token, showNotification }) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await axios.post(`${apiUrl}/api/users/change-password`, 
-        { old_password: oldPassword, new_password: newPassword },
-        { headers: { Authorization: `Bearer ${token}` } }
+      await api.post('/api/users/change-password', 
+        { old_password: oldPassword, new_password: newPassword }
       );
       showNotification('success', 'User password updated successfully.');
       setOldPassword('');

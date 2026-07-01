@@ -76,3 +76,30 @@ def promote_user_to_admin(
     db.commit()
     
     return {"message": f"User '{user.username}' has been promoted to administrator."}
+
+
+@router.delete("/{user_id}", status_code=status.HTTP_200_OK)
+def delete_user(
+    user_id: int,
+    current_user: User = Depends(get_current_active_superuser),
+    db: Session = Depends(get_db)
+):
+    """Delete a user account by ID (Admin only)."""
+    # Prevent self-deletion
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot delete your own administrator account."
+        )
+        
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found."
+        )
+        
+    db.delete(user)
+    db.commit()
+    
+    return {"message": f"User '{user.username}' has been deleted successfully."}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import api from '../../api';
 
 const Register = ({ apiUrl, setAuthView, showNotification }) => {
   const [username, setUsername] = useState('');
@@ -11,7 +11,7 @@ const Register = ({ apiUrl, setAuthView, showNotification }) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await axios.post(`${apiUrl}/api/auth/register`, {
+      await api.post('/api/auth/register', {
         username,
         email,
         password

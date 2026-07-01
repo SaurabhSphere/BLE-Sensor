@@ -20,6 +20,7 @@ class UserOut(BaseModel):
     is_verified: bool
     is_superuser: bool
     created_at: datetime
+    verification_sent_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -50,3 +51,12 @@ class ResetPasswordRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str = Field(..., min_length=8, max_length=100)
+
+# Resend Verification & Status schemas
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
+
+class VerificationStatusResponse(BaseModel):
+    email: EmailStr
+    is_verified: bool
+    verification_sent_at: Optional[datetime] = None
