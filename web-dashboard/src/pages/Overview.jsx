@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import SensorCard from '../components/SensorCard';
 
 const SENSOR_CATEGORIES = [
-  'All', 'DataLogger', 'SHT40', 'Soil Sensor', 'sen66', 'Lux Sensor', 'TempLogger', 'Ammonia Sensor'
+  'All', 'DataLogger'
 ];
 
 const Overview = ({
