@@ -103,9 +103,12 @@ def run_simulation():
             
             response = requests.post(API_URL, json=payload, headers=headers)
             
-            if response.status_code == 202:
+            if response.status_code in [200, 201, 202]:
                 res_data = response.json()
-                print(f"   ✓ Success (202 Accepted) | Raw Database Packet ID: {res_data.get('raw_packet_id')}")
+                print(f"   ✓ Success ({response.status_code}) | Raw Database Packet ID: {res_data.get('raw_packet_id')}")
+                if "processed_packets" in res_data:
+                    for p in res_data["processed_packets"]:
+                        print(f"     └─ Saved {p['type']} (Device {p['deviceId']}, Packet #{p.get('packetId', 'N/A')}) at {p['timestamp']}")
             else:
                 print(f"   ❌ Failed with status code: {response.status_code} | Details: {response.text}")
                 
