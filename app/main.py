@@ -6,7 +6,7 @@ from app.config import settings
 from app.database import SessionLocal
 from app.models.user import User
 from app.security import get_password_hash
-from app.routers import auth, users, packets, datalogger
+from app.routers import auth, users, packets, datalogger, registry
 from app.services.queue import packet_worker
 
 @asynccontextmanager
@@ -45,8 +45,57 @@ async def lifespan(app: FastAPI):
             print("="*58 + "\n")
         else:
             print(f"👤 Admin user '{admin.username}' ({admin.email}) already exists in the database.")
+            
+        # Seed default bovine tags in TagRegistry
+        from app.models.registry import TagRegistry
+        if db.query(TagRegistry).count() == 0:
+            default_tags = [
+                TagRegistry(
+                    device_id="11",
+                    name="Bovine #11",
+                    breed="Murrah Buffalo",
+                    location="Barn Sector A",
+                    weight="480 kg",
+                    notes="Lactation study subject A"
+                ),
+                TagRegistry(
+                    device_id="42",
+                    name="Bovine #42",
+                    breed="Holstein Cow",
+                    location="Barn Sector B",
+                    weight="620 kg",
+                    notes="Milk yield telemetry group 1"
+                ),
+                TagRegistry(
+                    device_id="89",
+                    name="Bovine #89",
+                    breed="Jersey Cow",
+                    location="Barn Sector B",
+                    weight="510 kg",
+                    notes="High fat content test cow"
+                ),
+                TagRegistry(
+                    device_id="93",
+                    name="Bovine #93",
+                    breed="Sahiwal Cow",
+                    location="Barn Sector A",
+                    weight="430 kg",
+                    notes="Native heat tolerance study"
+                ),
+                TagRegistry(
+                    device_id="248",
+                    name="Bovine #248",
+                    breed="Nili-Ravi Buffalo",
+                    location="Pasture Sector C",
+                    weight="550 kg",
+                    notes="Grazing behavior tracking collar"
+                ),
+            ]
+            db.add_all(default_tags)
+            db.commit()
+            print("🐃 Tag Registry Seeded with 5 default entries successfully.")
     except Exception as e:
-        print(f"❌ Failed to seed default admin: {e}")
+        print(f"❌ Failed to seed database: {e}")
     finally:
         db.close()
     
@@ -90,6 +139,7 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(packets.router, prefix="/api")
 app.include_router(datalogger.router, prefix="/api")
+app.include_router(registry.router, prefix="/api")
 
 # Simple base check
 @app.get("/")

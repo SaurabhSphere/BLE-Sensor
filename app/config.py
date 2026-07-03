@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     DEFAULT_ADMIN_PASSWORD: str = "AdminChangeMe123!"
 
     # URLs
-    FRONTEND_URL: str = "http://localhost:5173"
+    FRONTEND_URL: str = "https://blecom.netlify.app/"
 
     # Pydantic Settings Configuration
     model_config = SettingsConfigDict(
