@@ -47,6 +47,12 @@ const DataLoggerViewer = ({
         setActivePacketWithPoints(null);
         return;
       }
+      
+      // If we already loaded points for this packet ID, do not reload
+      if (activePacketWithPoints && activePacketWithPoints.id === activeDlPacket.id && activePacketWithPoints.displayData?.points) {
+        return;
+      }
+
       // If the packet already has points (e.g. if loaded via Overview tab), use it directly
       if (activeDlPacket.displayData?.points && activeDlPacket.displayData.points.length > 0) {
         setActivePacketWithPoints(activeDlPacket);
@@ -79,7 +85,7 @@ const DataLoggerViewer = ({
     };
     
     fetchFullPacket();
-  }, [activeDlPacket]);
+  }, [activeDlPacket, activePacketWithPoints]);
 
   const paginatedPackets = dataloggerPackets;
   const totalPages = Math.ceil(totalRecords / itemsPerPage) || 1;
@@ -108,8 +114,8 @@ const DataLoggerViewer = ({
   let predictedState = 'Low Activity / Rest';
   let stateColor = 'var(--accent-teal)';
 
-  if (activeDlPacket && activeDlPacket.displayData?.points) {
-    const points = activeDlPacket.displayData.points;
+  if (activePacketWithPoints && activePacketWithPoints.displayData?.points) {
+    const points = activePacketWithPoints.displayData.points;
     chartData = points.map((pt, index) => {
       const x = parseFloat(pt.x) || 0;
       const y = parseFloat(pt.y) || 0;
