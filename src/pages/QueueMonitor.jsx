@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import api from '../api';
 
 const QueueMonitor = ({
@@ -8,17 +8,18 @@ const QueueMonitor = ({
   fetchRawPackets,
   queueLoading,
   setQueueLoading,
-  showNotification
+  showNotification,
+  currentPage,
+  setCurrentPage,
+  totalRecords,
+  itemsPerPage,
+  queueSearch,
+  setQueueSearch,
+  queueStatusFilter,
+  setQueueStatusFilter,
+  queueSortOrder,
+  setQueueSortOrder
 }) => {
-  const [queueSearch, setQueueSearch] = useState('');
-  const [queueStatusFilter, setQueueStatusFilter] = useState('All');
-  const [queueSortOrder, setQueueSortOrder] = useState('desc');
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [queueSearch, queueStatusFilter, queueSortOrder]);
 
   const handleReprocessPacket = async (packetId) => {
     try {
@@ -75,25 +76,9 @@ const QueueMonitor = ({
     }
   };
 
-  // Filter and Sort rawPackets
-  const filtered = rawPackets.filter(p => {
-    const meta = getRawPacketMeta(p.payload);
-    const searchStr = queueSearch.toLowerCase();
-    const matchesSearch = queueSearch === '' || 
-      meta.deviceId.toLowerCase().includes(searchStr) || 
-      meta.appId.toLowerCase().includes(searchStr);
-    const matchesStatus = queueStatusFilter === 'All' || p.status === queueStatusFilter;
-    return matchesSearch && matchesStatus;
-  });
-
-  const sorted = [...filtered].sort((a, b) => {
-    const timeA = new Date(a.created_at).getTime();
-    const timeB = new Date(b.created_at).getTime();
-    return queueSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
-  });
-
-  const paginated = sorted.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-  const totalPages = Math.ceil(sorted.length / itemsPerPage) || 1;
+  // For the queue monitor feed, the server has already filtered, sorted, and paginated
+  const paginated = rawPackets;
+  const totalPages = Math.ceil(totalRecords / itemsPerPage) || 1;
 
   return (
     <div className="admin-view glassmorphism">
@@ -237,7 +222,7 @@ const QueueMonitor = ({
           {/* Pagination Controls */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.5rem', padding: '0 10px' }}>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-              Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong> (Showing {sorted.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, sorted.length)} of {sorted.length} records)
+              Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong> (Showing {totalRecords === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalRecords)} of {totalRecords} records)
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button

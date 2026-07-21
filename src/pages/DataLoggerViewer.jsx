@@ -10,54 +10,81 @@ import {
   ResponsiveContainer
 } from 'recharts';
 
+import api from '../api';
+
 const DataLoggerViewer = ({
   packets,
   selectedDlPacket,
   setSelectedDlPacket,
-  showNotification
+  showNotification,
+  currentPage,
+  setCurrentPage,
+  totalRecords,
+  itemsPerPage,
+  setItemsPerPage,
+  sortOrder,
+  setSortOrder,
+  deviceIdFilter,
+  setDeviceIdFilter,
+  selectedDeviceId,
+  setSelectedDeviceId,
+  startTime,
+  setStartTime,
+  endTime,
+  setEndTime,
+  deviceIdsList = []
 }) => {
-  const [deviceIdFilter, setDeviceIdFilter] = useState('');
-  const [sortOrder, setSortOrder] = useState('desc'); // 'desc', 'asc'
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 8;
+  const [activePacketWithPoints, setActivePacketWithPoints] = useState(null);
+  const [loadingPoints, setLoadingPoints] = useState(false);
 
-  const dataloggerPackets = useMemo(() => {
-    let result = packets.filter(p => p.type === 'DataLogger');
-
-    // Filter by Device ID
-    if (deviceIdFilter.trim()) {
-      const query = deviceIdFilter.trim().toLowerCase();
-      result = result.filter(p => {
-        const devId = String(p.displayData?.deviceId || '').toLowerCase();
-        return devId.includes(query);
-      });
-    }
-
-    // Sort by timestamp
-    result.sort((a, b) => {
-      const timeA = new Date(a.timestamp).getTime();
-      const timeB = new Date(b.timestamp).getTime();
-      return sortOrder === 'desc' ? timeB - timeA : timeA - timeB;
-    });
-
-    return result;
-  }, [packets, deviceIdFilter, sortOrder]);
-
+  const dataloggerPackets = packets;
   const activeDlPacket = dataloggerPackets.find(p => p.id === selectedDlPacket?.id) || dataloggerPackets[0] || null;
 
-  // Reset page when search changes
+  // On-demand fetch of coordinates for the active/selected packet
   useEffect(() => {
-    setCurrentPage(1);
-  }, [deviceIdFilter]);
+    const fetchFullPacket = async () => {
+      if (!activeDlPacket) {
+        setActivePacketWithPoints(null);
+        return;
+      }
+      // If the packet already has points (e.g. if loaded via Overview tab), use it directly
+      if (activeDlPacket.displayData?.points && activeDlPacket.displayData.points.length > 0) {
+        setActivePacketWithPoints(activeDlPacket);
+        return;
+      }
+      
+      try {
+        setLoadingPoints(true);
+        const headerId = activeDlPacket.id.toString().replace('dl-', '');
+        const response = await api.get(`/api/packets/datalogger/processed/${headerId}`);
+        const pkt = response.data;
+        const pointsMapped = pkt.points ? pkt.points.map(pt => ({
+          x: pt.x,
+          y: pt.y,
+          z: pt.z
+        })) : [];
+        
+        setActivePacketWithPoints({
+          ...activeDlPacket,
+          displayData: {
+            ...activeDlPacket.displayData,
+            points: pointsMapped
+          }
+        });
+      } catch (error) {
+        console.error("Error fetching full datalogger packet points:", error);
+      } finally {
+        setLoadingPoints(false);
+      }
+    };
+    
+    fetchFullPacket();
+  }, [activeDlPacket]);
 
-  const paginatedPackets = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    return dataloggerPackets.slice(startIndex, startIndex + itemsPerPage);
-  }, [dataloggerPackets, currentPage]);
+  const paginatedPackets = dataloggerPackets;
+  const totalPages = Math.ceil(totalRecords / itemsPerPage) || 1;
 
-  const totalPages = Math.ceil(dataloggerPackets.length / itemsPerPage) || 1;
-
-  if (packets.filter(p => p.type === 'DataLogger').length === 0) {
+  if (totalRecords === 0) {
     return (
       <div className="empty-state glassmorphism" style={{ padding: '6rem 2rem' }}>
         <div className="empty-icon">
@@ -144,30 +171,85 @@ const DataLoggerViewer = ({
       <div className="glassmorphism" style={{ padding: '1.5rem', maxHeight: '78vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '15px' }}>
         <div>
           <h4 style={{ marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px' }}>
-            DataLogger Logs ({dataloggerPackets.length})
+            DataLogger Logs ({totalRecords})
           </h4>
           
-          {/* Device ID Filter */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
+          {/* Device ID Filter Dropdown */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '8px' }}>
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Device ID:</span>
+            <select
+              value={selectedDeviceId}
+              onChange={(e) => setSelectedDeviceId(e.target.value)}
+              style={{ background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--card-border)', padding: '6px 10px', borderRadius: '8px', fontSize: '0.8rem', width: '100%', outline: 'none' }}
+            >
+              <option value="All">All Devices</option>
+              {deviceIdsList.map(id => (
+                <option key={id} value={id}>Device #{id}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Datetime start range picker */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '8px' }}>
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Start Timestamp:</span>
             <input 
-              type="text" 
-              placeholder="Filter by Device ID..." 
-              value={deviceIdFilter}
-              onChange={(e) => setDeviceIdFilter(e.target.value)}
-              style={{ background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--card-border)', padding: '6px 10px', borderRadius: '8px', fontSize: '0.8rem', width: '100%' }}
+              type="datetime-local" 
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+              style={{ background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--card-border)', padding: '6px 10px', borderRadius: '8px', fontSize: '0.8rem', width: '100%', outline: 'none', colorScheme: 'dark' }}
             />
           </div>
 
-          {/* Sort Order Button */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Sort Time:</span>
-            <button 
-              onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-              style={{ background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--card-border)', padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem', cursor: 'pointer' }}
-            >
-              {sortOrder === 'desc' ? '▼ Newest' : '▲ Oldest'}
-            </button>
+          {/* Datetime end range picker */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '10px' }}>
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>End Timestamp:</span>
+            <input 
+              type="datetime-local" 
+              value={endTime}
+              onChange={(e) => setEndTime(e.target.value)}
+              style={{ background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--card-border)', padding: '6px 10px', borderRadius: '8px', fontSize: '0.8rem', width: '100%', outline: 'none', colorScheme: 'dark' }}
+            />
           </div>
+
+          {/* Sort Order and Page Size Buttons */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px', background: 'rgba(255,255,255,0.01)', padding: '10px', borderRadius: '8px', border: '1px solid var(--card-border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Sort Time:</span>
+              <button 
+                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                style={{ background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--card-border)', padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem', cursor: 'pointer' }}
+              >
+                {sortOrder === 'desc' ? '▼ Newest' : '▲ Oldest'}
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Page Size:</span>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => setItemsPerPage(parseInt(e.target.value))}
+                style={{ background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--card-border)', padding: '4px 6px', borderRadius: '6px', fontSize: '0.75rem', outline: 'none' }}
+              >
+                {[8, 10, 20, 25, 50, 100].map(limit => (
+                  <option key={limit} value={limit}>{limit} logs</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Reset button if any filter is active */}
+          {(selectedDeviceId !== 'All' || startTime || endTime) && (
+            <button
+              onClick={() => {
+                setSelectedDeviceId('All');
+                setStartTime('');
+                setEndTime('');
+              }}
+              style={{ width: '100%', background: 'rgba(255, 60, 60, 0.1)', color: '#FF6B6B', border: '1px solid rgba(255, 60, 60, 0.2)', padding: '6px 0', borderRadius: '8px', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600, marginBottom: '8px' }}
+            >
+              Reset Filters
+            </button>
+          )}
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
@@ -205,7 +287,7 @@ const DataLoggerViewer = ({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid var(--card-border)', paddingTop: '10px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
             <span>Page {currentPage} of {totalPages}</span>
-            <span>Total: {dataloggerPackets.length}</span>
+            <span>Total: {totalRecords}</span>
           </div>
           <div style={{ display: 'flex', gap: '5px' }}>
             <button
@@ -248,7 +330,7 @@ const DataLoggerViewer = ({
 
       {/* Right Column: Detail Inspector Panel */}
       <div className="glassmorphism" style={{ padding: '2.25rem', maxHeight: '78vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        {activeDlPacket ? (
+        {activePacketWithPoints ? (
           <div>
             {/* Header Details */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--card-border)', paddingBottom: '1.25rem', marginBottom: '1.5rem' }}>
@@ -263,7 +345,7 @@ const DataLoggerViewer = ({
                   Notes: {activeBovine.notes}
                 </p>
                 <p style={{ margin: '6px 0 0', fontSize: '0.72rem', color: 'var(--text-secondary)', fontFamily: 'monospace', opacity: 0.7 }}>
-                  Session ID: {activeDlPacket.appId}
+                  Session ID: {activePacketWithPoints.appId}
                 </p>
               </div>
               <div className="status-badge live">
@@ -278,25 +360,25 @@ const DataLoggerViewer = ({
               <div className="sensor-card" style={{ border: 'none', background: 'rgba(255,255,255,0.015)', padding: '1.25rem' }}>
                 <div className="sensor-label">Batch ID</div>
                 <div className="sensor-value" style={{ fontSize: '1.5rem', color: 'var(--accent-teal)', fontWeight: 800 }}>
-                  #{activeDlPacket.displayData?.packetId}
+                  #{activePacketWithPoints.displayData?.packetId}
                 </div>
               </div>
               <div className="sensor-card" style={{ border: 'none', background: 'rgba(255,255,255,0.015)', padding: '1.25rem' }}>
                 <div className="sensor-label">Record Time</div>
                 <div className="sensor-value" style={{ fontSize: '1.05rem', fontWeight: 700, padding: '4px 0' }}>
-                  {new Date(activeDlPacket.timestamp).toLocaleString()}
+                  {new Date(activePacketWithPoints.timestamp).toLocaleString()}
                 </div>
               </div>
               <div className="sensor-card" style={{ border: 'none', background: 'rgba(255,255,255,0.015)', padding: '1.25rem' }}>
                 <div className="sensor-label">Ingested</div>
                 <div className="sensor-value" style={{ fontSize: '1.05rem', fontWeight: 700, padding: '4px 0' }}>
-                  {activeDlPacket.rawPacket?.created_at ? new Date(activeDlPacket.rawPacket.created_at).toLocaleString() : '--'}
+                  {activePacketWithPoints.rawPacket?.created_at ? new Date(activePacketWithPoints.rawPacket.created_at).toLocaleString() : '--'}
                 </div>
               </div>
               <div className="sensor-card" style={{ border: 'none', background: 'rgba(255,255,255,0.015)', padding: '1.25rem' }}>
                 <div className="sensor-label">Indexed</div>
                 <div className="sensor-value" style={{ fontSize: '1.05rem', fontWeight: 700, padding: '4px 0' }}>
-                  {activeDlPacket.rawPacket?.processed_at ? new Date(activeDlPacket.rawPacket.processed_at).toLocaleString() : '--'}
+                  {activePacketWithPoints.rawPacket?.processed_at ? new Date(activePacketWithPoints.rawPacket.processed_at).toLocaleString() : '--'}
                 </div>
               </div>
             </div>
@@ -304,28 +386,35 @@ const DataLoggerViewer = ({
 
 
             {/* Acceleration Waveforms Chart */}
-            <div style={{ height: '320px', width: '100%', marginBottom: '1.75rem', background: 'rgba(0,0,0,0.1)', border: '1px solid var(--card-border)', borderRadius: '14px', padding: '15px' }}>
+            <div style={{ height: '320px', width: '100%', marginBottom: '1.75rem', background: 'rgba(0,0,0,0.1)', border: '1px solid var(--card-border)', borderRadius: '14px', padding: '15px', position: 'relative' }}>
               <h4 style={{ margin: '0 0 10px 0', fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Acceleration Waves</h4>
-              <ResponsiveContainer width="100%" height="90%">
-                <LineChart data={chartData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--card-border)" />
-                  <XAxis dataKey="sample" stroke="var(--text-secondary)" fontSize={10} />
-                  <YAxis stroke="var(--text-secondary)" fontSize={10} />
-                  <Tooltip contentStyle={{ background: 'var(--bg-sidebar)', borderColor: 'var(--card-border)', color: 'var(--text-main)', borderRadius: '8px' }} itemStyle={{ color: 'var(--text-main)' }} />
-                  <Legend wrapperStyle={{ fontSize: 10 }} />
-                  <Line type="monotone" dataKey="x" stroke="#FF6B6B" dot={false} strokeWidth={1.5} name="X Axis" />
-                  <Line type="monotone" dataKey="y" stroke="#4ECDC4" dot={false} strokeWidth={1.5} name="Y Axis" />
-                  <Line type="monotone" dataKey="z" stroke="#95E1D3" dot={false} strokeWidth={1.5} name="Z Axis" />
-                  <Line type="monotone" dataKey="magnitude" stroke="#FFAE57" dot={false} strokeWidth={1} strokeDasharray="3 3" name="SVM Magnitude" />
-                </LineChart>
-              </ResponsiveContainer>
+              {loadingPoints ? (
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column', gap: '10px', justifyContent: 'center', alignItems: 'center', background: 'rgba(0,0,0,0.4)', borderRadius: '14px' }}>
+                  <div className="loader" style={{ width: '30px', height: '30px' }}></div>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Loading acceleration data...</span>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="90%">
+                  <LineChart data={chartData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--card-border)" />
+                    <XAxis dataKey="sample" stroke="var(--text-secondary)" fontSize={10} />
+                    <YAxis stroke="var(--text-secondary)" fontSize={10} />
+                    <Tooltip contentStyle={{ background: 'var(--bg-sidebar)', borderColor: 'var(--card-border)', color: 'var(--text-main)', borderRadius: '8px' }} itemStyle={{ color: 'var(--text-main)' }} />
+                    <Legend wrapperStyle={{ fontSize: 10 }} />
+                    <Line type="monotone" dataKey="x" stroke="#FF6B6B" dot={false} strokeWidth={1.5} name="X Axis" />
+                    <Line type="monotone" dataKey="y" stroke="#4ECDC4" dot={false} strokeWidth={1.5} name="Y Axis" />
+                    <Line type="monotone" dataKey="z" stroke="#95E1D3" dot={false} strokeWidth={1.5} name="Z Axis" />
+                    <Line type="monotone" dataKey="magnitude" stroke="#FFAE57" dot={false} strokeWidth={1} strokeDasharray="3 3" name="SVM Magnitude" />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
             </div>
 
             {/* Parsed Points Grid */}
-            <div className="points-grid">
+            <div className="points-grid" style={{ position: 'relative', minHeight: '150px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 18px', background: 'var(--input-bg)', borderBottom: '1px solid var(--card-border)' }}>
                 <span style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>XYZ Coordinates</span>
-                <span className="info-badge">80 Samples</span>
+                <span className="info-badge">{activePacketWithPoints.displayData?.points?.length || 0} Samples</span>
               </div>
               
               <div className="grid-header" style={{ display: 'grid', gridTemplateColumns: '70px 1fr 1fr 1fr', padding: '10px 18px', borderBottom: '1px solid var(--card-border)' }}>
@@ -335,36 +424,42 @@ const DataLoggerViewer = ({
                 <span style={{ color: '#95E1D3', textAlign: 'right' }}>Z Axis</span>
               </div>
 
-              <div className="grid-scroll" style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                {activeDlPacket.displayData?.points && activeDlPacket.displayData.points.map((pt, i) => (
-                  <div 
-                    key={i} 
-                    className="grid-row" 
-                    style={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: '70px 1fr 1fr 1fr', 
-                      padding: '8px 18px', 
-                      borderBottom: '1px solid rgba(255,255,255,0.02)',
-                      fontSize: '0.85rem' 
-                    }}
-                  >
-                    <span style={{ fontFamily: 'monospace', color: '#555' }}>#{String(i + 1).padStart(3, '0')}</span>
-                    <span style={{ fontFamily: 'monospace', color: '#FF6B6B', fontWeight: 700 }}>{pt.x}</span>
-                    <span style={{ fontFamily: 'monospace', color: '#4ECDC4', fontWeight: 700 }}>{pt.y}</span>
-                    <span style={{ fontFamily: 'monospace', color: '#95E1D3', fontWeight: 700, textAlign: 'right' }}>{pt.z}</span>
-                  </div>
-                ))}
-              </div>
+              {loadingPoints ? (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '120px' }}>
+                  <div className="loader" style={{ width: '25px', height: '25px' }}></div>
+                </div>
+              ) : (
+                <div className="grid-scroll" style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                  {activePacketWithPoints.displayData?.points && activePacketWithPoints.displayData.points.map((pt, i) => (
+                    <div 
+                      key={i} 
+                      className="grid-row" 
+                      style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: '70px 1fr 1fr 1fr', 
+                        padding: '8px 18px', 
+                        borderBottom: '1px solid rgba(255,255,255,0.02)',
+                        fontSize: '0.85rem' 
+                      }}
+                    >
+                      <span style={{ fontFamily: 'monospace', color: '#555' }}>#{String(i + 1).padStart(3, '0')}</span>
+                      <span style={{ fontFamily: 'monospace', color: '#FF6B6B', fontWeight: 700 }}>{pt.x}</span>
+                      <span style={{ fontFamily: 'monospace', color: '#4ECDC4', fontWeight: 700 }}>{pt.y}</span>
+                      <span style={{ fontFamily: 'monospace', color: '#95E1D3', fontWeight: 700, textAlign: 'right' }}>{pt.z}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* RawHex Display */}
-            {activeDlPacket.displayData?.rawData && (
+            {activePacketWithPoints.displayData?.rawData && (
               <div style={{ marginTop: '1.5rem', background: 'rgba(0,0,0,0.15)', padding: '1.25rem', borderRadius: '14px', border: '1px solid var(--card-border)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                   <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>RAW BINARY FRAME (246 BYTES)</span>
                   <button 
                     onClick={() => {
-                      navigator.clipboard.writeText(activeDlPacket.displayData.rawData);
+                      navigator.clipboard.writeText(activePacketWithPoints.displayData.rawData);
                       showNotification('success', 'Copied raw hex frame to clipboard.');
                     }} 
                     className="btn-detail-link" 
@@ -374,7 +469,7 @@ const DataLoggerViewer = ({
                   </button>
                 </div>
                 <div style={{ fontFamily: 'monospace', fontSize: '0.82rem', color: 'var(--accent-teal)', wordBreak: 'break-all', maxHeight: '60px', overflowY: 'auto' }}>
-                  {activeDlPacket.displayData.rawData}
+                  {activePacketWithPoints.displayData.rawData}
                 </div>
               </div>
             )}

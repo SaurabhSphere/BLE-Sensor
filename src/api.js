@@ -1,8 +1,8 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'https://ble-sensor.onrender.com',//'http://localhost:8000',//
-  timeout: 15000,
+  baseURL: 'https://boxing-assembled-fell-expected.trycloudflare.com',//'https://ble-sensor.onrender.com',//'http://localhost:8000',//
+  // timeout: 15000,
 });
 
 // Request Interceptor: Automatically inject Authorization token if available
