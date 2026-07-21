@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Optional, List
 
 class PacketCreate(BaseModel):
     data: Any
@@ -17,3 +17,7 @@ class PacketOut(BaseModel):
         json_encoders = {
             datetime: lambda v: v.isoformat()
         }
+
+class PaginatedPackets(BaseModel):
+    total: int
+    records: List[PacketOut]

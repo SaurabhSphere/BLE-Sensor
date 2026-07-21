@@ -4,7 +4,13 @@ from app.config import settings
 
 # Create database engine
 # For PostgreSQL we do not need connect_args={"check_same_thread": False}
-engine = create_engine(settings.DATABASE_URL)
+engine = create_engine(
+    settings.DATABASE_URL,
+    pool_size=20,
+    max_overflow=10,
+    pool_recycle=3600,
+    pool_pre_ping=True
+)
 
 # Create SessionLocal class for database sessions
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
