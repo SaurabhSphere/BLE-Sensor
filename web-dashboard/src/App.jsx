@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import api from './api';
 
 // Reusable Components
@@ -34,7 +34,7 @@ function App() {
   const [viewMode, setViewMode] = useState('overview'); // 'overview', 'graph', 'queue', 'datalogger', 'admin', 'settings'
   const [authView, setAuthView] = useState('login'); // 'login', 'register', 'forgot-password', 'reset-password'
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
-  const [apiUrl, setApiUrl] = useState('https://ble-sensor.onrender.com');
+  const [apiUrl, setApiUrl] = useState('https://boxing-assembled-fell-expected.trycloudflare.com');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(localStorage.getItem('sidebar_collapsed') === 'true');
 
   const toggleSidebar = () => {
@@ -45,6 +45,7 @@ function App() {
   
   // Telemetry Data State
   const [packets, setPackets] = useState([]);
+  const [statsPackets, setStatsPackets] = useState([]);
   const [loadingPackets, setLoadingPackets] = useState(true);
   const [selectedSensor, setSelectedSensor] = useState(null);
   const [activeCategory, setActiveCategory] = useState('All');
@@ -54,6 +55,37 @@ function App() {
   // DataLogger Raw Ingestion Queue State
   const [rawPackets, setRawPackets] = useState([]);
   const [queueLoading, setQueueLoading] = useState(false);
+
+  // Overview Tab Pagination & Filter State
+  const [overviewPage, setOverviewPage] = useState(1);
+  const [overviewLimit, setOverviewLimit] = useState(10);
+  const [overviewTotal, setOverviewTotal] = useState(0);
+  const [overviewSortField, setOverviewSortField] = useState('timestamp');
+  const [overviewSortOrder, setOverviewSortOrder] = useState('desc');
+  const [overviewSearch, setOverviewSearch] = useState('');
+  const [overviewDeviceId, setOverviewDeviceId] = useState('All');
+  const [overviewStartTime, setOverviewStartTime] = useState('');
+  const [overviewEndTime, setOverviewEndTime] = useState('');
+
+  // Inspector (DataLoggerViewer) Tab Pagination & Filter State
+  const [inspectorPage, setInspectorPage] = useState(1);
+  const [inspectorLimit, setInspectorLimit] = useState(8);
+  const [inspectorTotal, setInspectorTotal] = useState(0);
+  const [inspectorSortOrder, setInspectorSortOrder] = useState('desc');
+  const [inspectorSearch, setInspectorSearch] = useState('');
+  const [inspectorDeviceId, setInspectorDeviceId] = useState('All');
+  const [inspectorStartTime, setInspectorStartTime] = useState('');
+  const [inspectorEndTime, setInspectorEndTime] = useState('');
+
+  // Queue Monitor Tab Pagination & Filter State
+  const [queuePage, setQueuePage] = useState(1);
+  const [queueTotal, setQueueTotal] = useState(0);
+  const [queueSortOrder, setQueueSortOrder] = useState('desc');
+  const [queueSearch, setQueueSearch] = useState('');
+  const [queueStatusFilter, setQueueStatusFilter] = useState('All');
+
+  // Shared Device ID list fetched from DB
+  const [deviceIdsList, setDeviceIdsList] = useState([]);
   
   // Notification Toast Banner State
   const [notification, setNotification] = useState(null);
@@ -151,68 +183,135 @@ function App() {
     }
   }, [token, apiUrl]);
 
-  // Fetch BLE Packets from the backend
+  // Fetch BLE Packets from the backend based on current active view
   const fetchPackets = async () => {
     if (!token) return;
     try {
-      const [response, dlResponse] = await Promise.all([
-        api.get('/api/packets'),
-        api.get('/api/packets/datalogger/processed?include_points=true')
-      ]);
-      
-      const generalPackets = response.data.map(pkt => {
-        const payload = pkt.data || {};
-        const innerData = payload.data || payload;
-
-        let sensorType = 'Unknown';
-        if (innerData.type === 'DataLogger' || innerData.points || innerData.deviceId) sensorType = 'DataLogger';
-        else if (innerData.temperature && innerData.humidity) sensorType = 'SHT40';
-        else if (innerData.nitrogen || innerData.phosphorus) sensorType = 'Soil Sensor';
-        else if (innerData.co2 || innerData.pm25) sensorType = 'sen66';
-        else if (innerData.lux) sensorType = 'Lux Sensor';
-        else if (innerData.ammonia) sensorType = 'Ammonia Sensor';
-
-        return {
-          ...pkt,
-          appId: pkt.appId || innerData.appId || payload.appId || 'Unknown',
-          type: sensorType,
-          displayData: innerData,
-          timestamp: pkt.timestamp || payload.timestamp
+      if (viewMode === 'overview' || viewMode === 'graph') {
+        // For Overview / Graph, fetch paginated general packets (which include DataLogger)
+        // If graph mode, we might want a larger limit (e.g. 100) or let it use default limit
+        const limit = viewMode === 'graph' ? 100 : overviewLimit;
+        const page = viewMode === 'graph' ? 1 : overviewPage;
+        
+        const params = {
+          page: page,
+          limit: limit,
+          appId: selectedAppId,
+          type: activeCategory !== 'All' ? activeCategory : undefined,
+          deviceId: overviewDeviceId !== 'All' ? overviewDeviceId : undefined,
+          startTime: overviewStartTime && !isNaN(Date.parse(overviewStartTime)) ? new Date(overviewStartTime).toISOString() : undefined,
+          endTime: overviewEndTime && !isNaN(Date.parse(overviewEndTime)) ? new Date(overviewEndTime).toISOString() : undefined,
+          search: overviewSearch || undefined,
+          sortField: overviewSortField,
+          sortOrder: overviewSortOrder
         };
-      }).filter(pkt => pkt.type !== 'DataLogger');
 
-      // Transform relational DataLogger records into same unified shape for Overview
-      const dlPackets = dlResponse.data.map(pkt => {
-        const pointsMapped = pkt.points ? pkt.points.map(pt => ({
-          x: pt.x,
-          y: pt.y,
-          z: pt.z
-        })) : [];
+        // Also fetch statsPackets for the top grid cards (always latest 100, unfiltered by page/search, but filtered by appId)
+        const statsParams = {
+          page: 1,
+          limit: 100,
+          appId: selectedAppId
+        };
+        
+        const [response, statsResponse] = await Promise.all([
+          api.get('/api/packets', { params }),
+          viewMode === 'overview' ? api.get('/api/packets', { params: statsParams }) : Promise.resolve({ data: { records: [] } })
+        ]);
+        
+        const { total, records } = response.data;
+        const statsRecords = statsResponse.data.records || [];
+        
+        const mappedPackets = records.map(pkt => {
+          const payload = pkt.data || {};
+          const innerData = payload.data || payload;
 
-        return {
-          id: `dl-${pkt.id}`,
-          appId: pkt.app_id || pkt.appId || 'Unknown',
-          type: 'DataLogger',
-          displayData: {
-            appId: pkt.app_id || pkt.appId,
-            deviceId: pkt.device_id,
-            packetId: pkt.packet_id_num,
-            totalPackets: pkt.total_packets,
-            rawData: pkt.raw_data,
-            points: pointsMapped,
+          let sensorType = 'Unknown';
+          if (innerData.type === 'DataLogger' || innerData.points || innerData.deviceId) sensorType = 'DataLogger';
+          else if (innerData.temperature && innerData.humidity) sensorType = 'SHT40';
+          else if (innerData.nitrogen || innerData.phosphorus) sensorType = 'Soil Sensor';
+          else if (innerData.co2 || innerData.pm25) sensorType = 'sen66';
+          else if (innerData.lux) sensorType = 'Lux Sensor';
+          else if (innerData.ammonia) sensorType = 'Ammonia Sensor';
+
+          return {
+            ...pkt,
+            appId: pkt.appId || innerData.appId || payload.appId || 'Unknown',
+            type: sensorType,
+            displayData: innerData,
+            timestamp: pkt.timestamp || payload.timestamp
+          };
+        });
+
+        const mappedStatsPackets = statsRecords.map(pkt => {
+          const payload = pkt.data || {};
+          const innerData = payload.data || payload;
+
+          let sensorType = 'Unknown';
+          if (innerData.type === 'DataLogger' || innerData.points || innerData.deviceId) sensorType = 'DataLogger';
+          else if (innerData.temperature && innerData.humidity) sensorType = 'SHT40';
+          else if (innerData.nitrogen || innerData.phosphorus) sensorType = 'Soil Sensor';
+          else if (innerData.co2 || innerData.pm25) sensorType = 'sen66';
+          else if (innerData.lux) sensorType = 'Lux Sensor';
+          else if (innerData.ammonia) sensorType = 'Ammonia Sensor';
+
+          return {
+            ...pkt,
+            appId: pkt.appId || innerData.appId || payload.appId || 'Unknown',
+            type: sensorType,
+            displayData: innerData,
+            timestamp: pkt.timestamp || payload.timestamp
+          };
+        });
+        
+        setPackets(mappedPackets);
+        if (viewMode === 'overview') {
+          setStatsPackets(mappedStatsPackets);
+        }
+        setOverviewTotal(total);
+      } else if (viewMode === 'datalogger') {
+        // For Inspector (DataLoggerViewer), fetch paginated datalogger processed headers
+        // In the Inspector, the client currently expects a combined packets list where type === 'DataLogger'
+        // So we fetch the paginated headers, map them to the unified shape, and set the packets state!
+        const params = {
+          page: inspectorPage,
+          limit: inspectorLimit,
+          deviceId: inspectorDeviceId !== 'All' ? inspectorDeviceId : undefined,
+          startTime: inspectorStartTime && !isNaN(Date.parse(inspectorStartTime)) ? new Date(inspectorStartTime).toISOString() : undefined,
+          endTime: inspectorEndTime && !isNaN(Date.parse(inspectorEndTime)) ? new Date(inspectorEndTime).toISOString() : undefined,
+          sortOrder: inspectorSortOrder
+        };
+        
+        const response = await api.get('/api/packets/datalogger/processed', { params });
+        const { total, records } = response.data;
+        
+        const dlPackets = records.map(pkt => {
+          const pointsMapped = pkt.points ? pkt.points.map(pt => ({
+            x: pt.x,
+            y: pt.y,
+            z: pt.z
+          })) : [];
+
+          return {
+            id: `dl-${pkt.id}`,
+            appId: pkt.app_id || pkt.appId || 'Unknown',
+            type: 'DataLogger',
+            displayData: {
+              appId: pkt.app_id || pkt.appId,
+              deviceId: pkt.device_id,
+              packetId: pkt.packet_id_num,
+              totalPackets: pkt.total_packets,
+              rawData: pkt.raw_data,
+              points: pointsMapped,
+              rawPacket: pkt.raw_packet
+            },
+            timestamp: pkt.timestamp,
             rawPacket: pkt.raw_packet
-          },
-          timestamp: pkt.timestamp,
-          rawPacket: pkt.raw_packet
-        };
-      });
-
-      // Combine and sort by timestamp descending
-      const combinedPackets = [...generalPackets, ...dlPackets].sort((a, b) => {
-        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-      });
-
-      setPackets(combinedPackets);
+          };
+        });
+        
+        setPackets(dlPackets);
+        setInspectorTotal(total);
+      }
     } catch (error) {
       console.error("Error fetching telemetry packets:", error);
     } finally {
@@ -221,26 +320,161 @@ function App() {
   };
 
   const fetchRawPackets = async () => {
-    if (!token) return;
+    if (!token || viewMode !== 'queue') return;
     try {
-      const response = await api.get('/api/packets/datalogger/raw');
-      setRawPackets(response.data);
+      setQueueLoading(true);
+      const params = {
+        page: queuePage,
+        limit: 10,
+        status: queueStatusFilter !== 'All' ? queueStatusFilter : undefined,
+        search: queueSearch || undefined,
+        sortOrder: queueSortOrder
+      };
+      const response = await api.get('/api/packets/datalogger/raw', { params });
+      const { total, records } = response.data;
+      setRawPackets(records);
+      setQueueTotal(total);
     } catch (error) {
       console.error("Error fetching raw packets:", error);
+    } finally {
+      setQueueLoading(false);
     }
   };
 
+  const fetchDeviceIds = async () => {
+    if (!token) return;
+    try {
+      const response = await api.get('/api/packets/devices');
+      setDeviceIdsList(response.data);
+    } catch (error) {
+      console.error("Error fetching unique device IDs:", error);
+    }
+  };
+
+  const fetchPacketsRef = useRef(fetchPackets);
+  const fetchRawPacketsRef = useRef(fetchRawPackets);
+
+  useEffect(() => {
+    fetchPacketsRef.current = fetchPackets;
+    fetchRawPacketsRef.current = fetchRawPackets;
+  });
+
+  // 1. Immediate fetch for Overview / Graph changes
   useEffect(() => {
     if (token) {
-      fetchPackets();
-      fetchRawPackets();
-      const interval = setInterval(() => {
+      if (viewMode === 'overview' || viewMode === 'graph') {
         fetchPackets();
-        fetchRawPackets();
-      }, 5000);
-      return () => clearInterval(interval);
+      }
     }
-  }, [token, apiUrl]);
+  }, [
+    token, 
+    viewMode, 
+    overviewPage, 
+    overviewLimit,
+    overviewSortField, 
+    overviewSortOrder, 
+    overviewSearch, 
+    overviewDeviceId,
+    overviewStartTime,
+    overviewEndTime,
+    selectedAppId, 
+    activeCategory, 
+    apiUrl
+  ]);
+
+  // 2. Immediate fetch for Inspector (DataLoggerViewer) changes
+  useEffect(() => {
+    if (token) {
+      if (viewMode === 'datalogger') {
+        fetchPackets();
+      }
+    }
+  }, [
+    token,
+    viewMode,
+    inspectorPage,
+    inspectorLimit,
+    inspectorSortOrder,
+    inspectorSearch,
+    inspectorDeviceId,
+    inspectorStartTime,
+    inspectorEndTime,
+    apiUrl
+  ]);
+
+  // 3. Immediate fetch for Queue Monitor changes
+  useEffect(() => {
+    if (token) {
+      if (viewMode === 'queue') {
+        fetchRawPackets();
+      }
+    }
+  }, [
+    token,
+    viewMode,
+    queuePage,
+    queueStatusFilter,
+    queueSortOrder,
+    queueSearch,
+    apiUrl
+  ]);
+
+  // Fetch unique device IDs on view mode load
+  useEffect(() => {
+    if (token && (viewMode === 'overview' || viewMode === 'datalogger')) {
+      fetchDeviceIds();
+    }
+  }, [token, viewMode, apiUrl]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setOverviewPage(1);
+  }, [selectedAppId, activeCategory, overviewSearch, overviewLimit, overviewDeviceId, overviewStartTime, overviewEndTime]);
+
+  useEffect(() => {
+    setInspectorPage(1);
+  }, [inspectorSearch, inspectorLimit, inspectorDeviceId, inspectorStartTime, inspectorEndTime]);
+
+  useEffect(() => {
+    setQueuePage(1);
+  }, [queueSearch, queueStatusFilter]);
+
+  // Periodic polling hook using refs to prevent stale closures and incorrect API requests
+  useEffect(() => {
+    if (!token) return;
+    const interval = setInterval(() => {
+      // Suspend polling if the browser tab is hidden or lacks window focus
+      if (document.hidden || !document.hasFocus()) return;
+
+      if (viewMode === 'overview' || viewMode === 'graph' || viewMode === 'datalogger') {
+        fetchPacketsRef.current();
+      } else if (viewMode === 'queue') {
+        fetchRawPacketsRef.current();
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [token, viewMode]);
+
+  // Revalidate active tab immediately when window/tab regains focus or visibility
+  useEffect(() => {
+    if (!token) return;
+    const handleFocusOrVisible = () => {
+      if (!document.hidden && document.hasFocus()) {
+        if (viewMode === 'overview' || viewMode === 'graph' || viewMode === 'datalogger') {
+          fetchPacketsRef.current();
+        } else if (viewMode === 'queue') {
+          fetchRawPacketsRef.current();
+        }
+      }
+    };
+
+    window.addEventListener('focus', handleFocusOrVisible);
+    document.addEventListener('visibilitychange', handleFocusOrVisible);
+    return () => {
+      window.removeEventListener('focus', handleFocusOrVisible);
+      document.removeEventListener('visibilitychange', handleFocusOrVisible);
+    };
+  }, [token, viewMode]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -318,7 +552,7 @@ function App() {
   }
 
   // RENDER AUTHENTICATED DASHBOARD
-  const uniqueAppIds = ['All', ...new Set(packets.map(p => p.appId).filter(id => id && id !== 'Unknown'))];
+  const uniqueAppIds = ['All', ...new Set([...packets, ...statsPackets].map(p => p.appId).filter(id => id && id !== 'Unknown'))];
 
   return (
     <div className={`dashboard-wrapper ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${theme === 'light' ? 'light-theme' : ''}`}>
@@ -352,11 +586,30 @@ function App() {
           {viewMode === 'overview' && (
             <Overview 
               packets={packets}
+              statsPackets={statsPackets}
               loadingPackets={loadingPackets}
               activeCategory={activeCategory}
               setActiveCategory={setActiveCategory}
               selectedAppId={selectedAppId}
               setSelectedSensor={setSelectedSensor}
+              currentPage={overviewPage}
+              setCurrentPage={setOverviewPage}
+              totalRecords={overviewTotal}
+              itemsPerPage={overviewLimit}
+              setItemsPerPage={setOverviewLimit}
+              sortField={overviewSortField}
+              setSortField={setOverviewSortField}
+              sortOrder={overviewSortOrder}
+              setSortOrder={setOverviewSortOrder}
+              deviceIdFilter={overviewSearch}
+              setDeviceIdFilter={setOverviewSearch}
+              selectedDeviceId={overviewDeviceId}
+              setSelectedDeviceId={setOverviewDeviceId}
+              startTime={overviewStartTime}
+              setStartTime={setOverviewStartTime}
+              endTime={overviewEndTime}
+              setEndTime={setOverviewEndTime}
+              deviceIdsList={deviceIdsList}
             />
           )}
 
@@ -377,6 +630,16 @@ function App() {
               queueLoading={queueLoading}
               setQueueLoading={setQueueLoading}
               showNotification={showNotification}
+              currentPage={queuePage}
+              setCurrentPage={setQueuePage}
+              totalRecords={queueTotal}
+              itemsPerPage={10}
+              queueSearch={queueSearch}
+              setQueueSearch={setQueueSearch}
+              queueStatusFilter={queueStatusFilter}
+              setQueueStatusFilter={setQueueStatusFilter}
+              queueSortOrder={queueSortOrder}
+              setQueueSortOrder={setQueueSortOrder}
             />
           )}
 
@@ -386,6 +649,22 @@ function App() {
               selectedDlPacket={selectedDlPacket}
               setSelectedDlPacket={setSelectedDlPacket}
               showNotification={showNotification}
+              currentPage={inspectorPage}
+              setCurrentPage={setInspectorPage}
+              totalRecords={inspectorTotal}
+              itemsPerPage={inspectorLimit}
+              setItemsPerPage={setInspectorLimit}
+              sortOrder={inspectorSortOrder}
+              setSortOrder={setInspectorSortOrder}
+              deviceIdFilter={inspectorSearch}
+              setDeviceIdFilter={setInspectorSearch}
+              selectedDeviceId={inspectorDeviceId}
+              setSelectedDeviceId={setInspectorDeviceId}
+              startTime={inspectorStartTime}
+              setStartTime={setInspectorStartTime}
+              endTime={inspectorEndTime}
+              setEndTime={setInspectorEndTime}
+              deviceIdsList={deviceIdsList}
             />
           )}
 

@@ -48,3 +48,13 @@ class DataLoggerHeaderOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class PaginatedRawPackets(BaseModel):
+    total: int
+    records: List[RawPacketOut]
+
+
+class PaginatedDataLoggerHeaders(BaseModel):
+    total: int
+    records: List[DataLoggerHeaderOut]

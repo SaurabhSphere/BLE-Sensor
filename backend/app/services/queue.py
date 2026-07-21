@@ -27,8 +27,6 @@ async def packet_worker():
                 # Fetch raw packet record
                 raw_packet = db.query(RawPacket).filter(RawPacket.id == packet_id).first()
                 if not raw_packet or raw_packet.status != "pending":
-                    packet_queue.task_done()
-                    db.close()
                     continue
                 
                 payload = raw_packet.payload

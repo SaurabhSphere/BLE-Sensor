@@ -10,7 +10,7 @@ class RawPacket(Base):
     id = Column(Integer, primary_key=True, index=True)
     payload = Column(JSON, nullable=False)
     status = Column(String, default="pending", index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), default=func.now(), index=True)
     processed_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationship to processed headers
@@ -28,7 +28,7 @@ class DataLoggerHeader(Base):
     packet_id_num = Column(Integer, nullable=False)
     total_packets = Column(Integer, default=0)
     raw_data = Column(Text, nullable=True)
-    timestamp = Column(DateTime(timezone=True), nullable=False)
+    timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), default=func.now())
 
     # Relationships

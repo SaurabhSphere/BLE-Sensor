@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React from 'react';
 import SensorCard from '../components/SensorCard';
 
 const SENSOR_CATEGORIES = [
@@ -7,60 +7,35 @@ const SENSOR_CATEGORIES = [
 
 const Overview = ({
   packets,
+  statsPackets = [],
   loadingPackets,
   activeCategory,
   setActiveCategory,
   selectedAppId,
-  setSelectedSensor
+  setSelectedSensor,
+  currentPage,
+  setCurrentPage,
+  totalRecords,
+  itemsPerPage,
+  setItemsPerPage,
+  sortField,
+  setSortField,
+  sortOrder,
+  setSortOrder,
+  deviceIdFilter,
+  setDeviceIdFilter,
+  selectedDeviceId,
+  setSelectedDeviceId,
+  startTime,
+  setStartTime,
+  endTime,
+  setEndTime,
+  deviceIdsList = []
 }) => {
-  // Sort and filter states
-  const [deviceIdFilter, setDeviceIdFilter] = useState('');
-  const [sortField, setSortField] = useState('timestamp'); // 'timestamp', 'type', 'deviceId'
-  const [sortOrder, setSortOrder] = useState('desc'); // 'asc', 'desc'
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
-
-  // Local filtering logic
+  // Stats grid packets filtering using statsPackets (overall latest unfiltered by page)
   const filteredByApp = selectedAppId === 'All'
-    ? packets
-    : packets.filter(p => p.appId === selectedAppId);
-
-  const filteredPackets = useMemo(() => {
-    let result = activeCategory === 'All'
-      ? filteredByApp
-      : filteredByApp.filter(p => p.type === activeCategory);
-
-    // Filter by Device ID
-    if (deviceIdFilter.trim()) {
-      const query = deviceIdFilter.trim().toLowerCase();
-      result = result.filter(p => {
-        const devId = String(p.displayData?.deviceId || '').toLowerCase();
-        const appIdStr = String(p.appId || '').toLowerCase();
-        return devId.includes(query) || appIdStr.includes(query);
-      });
-    }
-
-    // Sort result
-    result.sort((a, b) => {
-      let valA, valB;
-      if (sortField === 'timestamp') {
-        valA = new Date(a.timestamp).getTime();
-        valB = new Date(b.timestamp).getTime();
-      } else if (sortField === 'type') {
-        valA = String(a.type || '').toLowerCase();
-        valB = String(b.type || '').toLowerCase();
-      } else if (sortField === 'deviceId') {
-        valA = String(a.displayData?.deviceId || a.appId || '').toLowerCase();
-        valB = String(b.displayData?.deviceId || b.appId || '').toLowerCase();
-      }
-
-      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
-      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
-      return 0;
-    });
-
-    return result;
-  }, [filteredByApp, activeCategory, deviceIdFilter, sortField, sortOrder]);
+    ? statsPackets
+    : statsPackets.filter(p => p.appId === selectedAppId);
 
   const latestBySensorType = Array.from(new Map(
     filteredByApp.map(p => [p.type, p])
@@ -70,18 +45,9 @@ const Overview = ({
     ? latestBySensorType
     : latestBySensorType.filter(p => p.type === activeCategory);
 
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [activeCategory, deviceIdFilter, selectedAppId]);
-
-  // Paginated packets
-  const paginatedPackets = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    return filteredPackets.slice(startIndex, startIndex + itemsPerPage);
-  }, [filteredPackets, currentPage]);
-
-  const totalPages = Math.ceil(filteredPackets.length / itemsPerPage) || 1;
+  // For the table feed, the server has already paginated, sorted, and filtered
+  const paginatedPackets = packets;
+  const totalPages = Math.ceil(totalRecords / itemsPerPage) || 1;
 
   return (
     <>
@@ -153,23 +119,74 @@ const Overview = ({
                   >
                     {sortOrder === 'asc' ? '▲ Asc' : '▼ Desc'}
                   </button>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: '10px' }}>Page Size:</span>
+                  <select 
+                    value={itemsPerPage} 
+                    onChange={(e) => setItemsPerPage(parseInt(e.target.value))}
+                    style={{ background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--card-border)', padding: '6px 12px', borderRadius: '8px', fontSize: '0.8rem', outline: 'none' }}
+                  >
+                    {[10, 20, 25, 50, 100].map(limit => (
+                      <option key={limit} value={limit}>{limit} records</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
               {/* Filters Area */}
               <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', alignItems: 'center', background: 'var(--input-bg)', padding: '12px 18px', borderRadius: '12px', border: '1px solid var(--card-border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '200px' }}>
+                {/* Device ID select dropdown */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '180px' }}>
                   <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Device ID:</span>
+                  <select
+                    value={selectedDeviceId}
+                    onChange={(e) => setSelectedDeviceId(e.target.value)}
+                    style={{ background: 'var(--bg-base)', color: 'var(--text-main)', border: '1px solid var(--card-border)', padding: '6px 10px', borderRadius: '8px', fontSize: '0.8rem', outline: 'none' }}
+                  >
+                    <option value="All">All Devices</option>
+                    {deviceIdsList.map(id => (
+                      <option key={id} value={id}>Device #{id}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Datetime start range picker */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '220px' }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Start:</span>
                   <input 
-                    type="text" 
-                    placeholder="Search ID..." 
-                    value={deviceIdFilter}
-                    onChange={(e) => setDeviceIdFilter(e.target.value)}
-                    style={{ flex: 1, background: 'var(--bg-base)', color: 'var(--text-main)', border: '1px solid var(--card-border)', padding: '6px 12px', borderRadius: '8px', fontSize: '0.8rem' }}
+                    type="datetime-local" 
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    style={{ background: 'var(--bg-base)', color: 'var(--text-main)', border: '1px solid var(--card-border)', padding: '6px 10px', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', colorScheme: 'dark' }}
                   />
                 </div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  Found: <strong>{filteredPackets.length}</strong>
+
+                {/* Datetime end range picker */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '220px' }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>End:</span>
+                  <input 
+                    type="datetime-local" 
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    style={{ background: 'var(--bg-base)', color: 'var(--text-main)', border: '1px solid var(--card-border)', padding: '6px 10px', borderRadius: '8px', fontSize: '0.8rem', outline: 'none', colorScheme: 'dark' }}
+                  />
+                </div>
+
+                {/* Reset button if any filter is active */}
+                {(selectedDeviceId !== 'All' || startTime || endTime) && (
+                  <button
+                    onClick={() => {
+                      setSelectedDeviceId('All');
+                      setStartTime('');
+                      setEndTime('');
+                    }}
+                    style={{ background: 'rgba(255, 60, 60, 0.1)', color: '#FF6B6B', border: '1px solid rgba(255, 60, 60, 0.2)', padding: '6px 12px', borderRadius: '8px', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600 }}
+                  >
+                    Reset Filters
+                  </button>
+                )}
+
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 'auto' }}>
+                  Found: <strong>{totalRecords}</strong>
                 </div>
               </div>
             </div>
