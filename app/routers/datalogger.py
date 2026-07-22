@@ -1,11 +1,15 @@
+import csv
+import io
+import math
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy import Text, cast
 from sqlalchemy.orm import Session, joinedload, load_only
 from sqlalchemy.sql import func
 from typing import List, Optional
-from app.database import get_db
-from app.models.datalogger import RawPacket, DataLoggerHeader
+from app.database import get_db, SessionLocal
+from app.models.datalogger import RawPacket, DataLoggerHeader, DataLoggerPoint
 from app.schemas.datalogger import RawPacketOut, DataLoggerHeaderOut, PaginatedRawPackets, PaginatedDataLoggerHeaders
 from app.services.queue import packet_queue
 
@@ -172,4 +176,148 @@ def get_processed_header(header_id: int, db: Session = Depends(get_db)):
             detail="Processed header not found"
         )
     return header
+
+
+@router.get("/export/csv")
+def export_datalogger_csv(
+    device_id: Optional[str] = Query(None, alias="deviceId"),
+    start_time: Optional[datetime] = Query(None, alias="startTime"),
+    end_time: Optional[datetime] = Query(None, alias="endTime"),
+    export_type: str = Query("packets", alias="exportType", description="export mode: 'packets' or 'samples'"),
+    sort_order: str = Query("desc", alias="sortOrder"),
+    db: Session = Depends(get_db)
+):
+    """
+    Export DataLogger telemetry matching filters as a streaming CSV file.
+    exportType='packets': 1 row per packet header (metadata, timestamps, sequence num, sample count).
+    exportType='samples': 1 row per 3D XYZ spatial sample.
+    """
+    timestamp_label = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    dev_label = device_id if (device_id and device_id != 'All') else "all_devices"
+    filename = f"datalogger_{export_type}_{dev_label}_{timestamp_label}.csv"
+
+    def generate_csv():
+        db_stream = SessionLocal()
+        try:
+            output = io.StringIO()
+            writer = csv.writer(output)
+
+            query = db_stream.query(DataLoggerHeader)
+            
+            if device_id and device_id != 'All':
+                query = query.filter(DataLoggerHeader.device_id == device_id)
+                
+            if start_time:
+                query = query.filter(DataLoggerHeader.timestamp >= start_time)
+            if end_time:
+                query = query.filter(DataLoggerHeader.timestamp <= end_time)
+                
+            if sort_order == 'asc':
+                query = query.order_by(DataLoggerHeader.timestamp.asc())
+            else:
+                query = query.order_by(DataLoggerHeader.timestamp.desc())
+
+            BATCH_SIZE = 100
+
+            if export_type == "samples":
+                writer.writerow([
+                    "Header_ID",
+                    "Timestamp_UTC",
+                    "Device_ID",
+                    "Packet_Sequence_Num",
+                    "Total_Packets",
+                    "Point_Index",
+                    "X",
+                    "Y",
+                    "Z",
+                    "Vector_Magnitude"
+                ])
+                output.seek(0)
+                yield output.read()
+                output.truncate(0)
+                output.seek(0)
+
+                total_headers = query.count()
+                offset = 0
+                while offset < total_headers:
+                    headers = query.options(joinedload(DataLoggerHeader.points)).offset(offset).limit(BATCH_SIZE).all()
+                    for h in headers:
+                        ts_str = h.timestamp.isoformat() if h.timestamp else ""
+                        if h.points:
+                            for pt in h.points:
+                                x_val = pt.x if pt.x is not None else 0
+                                y_val = pt.y if pt.y is not None else 0
+                                z_val = pt.z if pt.z is not None else 0
+                                mag = round(math.sqrt(x_val * x_val + y_val * y_val + z_val * z_val), 2)
+                                writer.writerow([
+                                    h.id,
+                                    ts_str,
+                                    h.device_id,
+                                    h.packet_id_num,
+                                    h.total_packets,
+                                    pt.point_index,
+                                    x_val,
+                                    y_val,
+                                    z_val,
+                                    mag
+                                ])
+                        output.seek(0)
+                        yield output.read()
+                        output.truncate(0)
+                        output.seek(0)
+                    offset += BATCH_SIZE
+
+            else:
+                writer.writerow([
+                    "Header_ID",
+                    "Timestamp_UTC",
+                    "App_ID",
+                    "Device_ID",
+                    "Packet_Sequence_Num",
+                    "Total_Packets",
+                    "Points_Count",
+                    "Raw_Hex_Data",
+                    "Created_At"
+                ])
+                output.seek(0)
+                yield output.read()
+                output.truncate(0)
+                output.seek(0)
+
+                total_headers = query.count()
+                offset = 0
+                while offset < total_headers:
+                    headers = query.options(joinedload(DataLoggerHeader.points)).offset(offset).limit(BATCH_SIZE).all()
+                    for h in headers:
+                        ts_str = h.timestamp.isoformat() if h.timestamp else ""
+                        created_str = h.created_at.isoformat() if h.created_at else ""
+                        pts_count = len(h.points) if h.points else 0
+                        writer.writerow([
+                            h.id,
+                            ts_str,
+                            h.app_id,
+                            h.device_id,
+                            h.packet_id_num,
+                            h.total_packets,
+                            pts_count,
+                            h.raw_data or "",
+                            created_str
+                        ])
+                        output.seek(0)
+                        yield output.read()
+                        output.truncate(0)
+                        output.seek(0)
+                    offset += BATCH_SIZE
+        finally:
+            db_stream.close()
+
+    return StreamingResponse(
+        generate_csv(),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
+    )
+
 
