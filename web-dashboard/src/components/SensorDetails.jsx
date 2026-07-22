@@ -170,9 +170,9 @@ const SensorDetails = ({ sensor, onClose }) => {
               </div>
             </div>
 
-            <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'flex-end' }}>
+            {/* <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'flex-end' }}>
               <button onClick={handleCopyRaw} className="btn-primary" style={{ padding: '8px 16px' }}>Copy Binary Stream</button>
-            </div>
+            </div> */}
 
           </div>
         );
@@ -335,11 +335,11 @@ const SensorDetails = ({ sensor, onClose }) => {
         <div className="modal-body">
           {renderSpecificDetails()}
 
-          <div className="action-buttons">
+          {/* <div className="action-buttons">
             <button className="btn-primary" onClick={() => alert('Command requested: Get Data')}>Get Data</button>
             <button className="btn-secondary" onClick={() => alert('Command requested: Pause')}>Pause</button>
             <button className="btn-danger" onClick={() => alert('Command requested: Reset')}>Reset</button>
-          </div>
+          </div> */}
         </div>
       </div>
     </div>
