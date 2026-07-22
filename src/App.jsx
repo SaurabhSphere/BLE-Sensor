@@ -18,6 +18,7 @@ import Overview from './pages/Overview';
 import Analytics from './pages/Analytics';
 import QueueMonitor from './pages/QueueMonitor';
 import DataLoggerViewer from './pages/DataLoggerViewer';
+import DataExport from './pages/DataExport';
 import AdminPanel from './pages/AdminPanel';
 import Settings from './pages/Settings';
 import NotFound from './pages/NotFound';
@@ -34,7 +35,7 @@ function App() {
   const [viewMode, setViewMode] = useState('overview'); // 'overview', 'graph', 'queue', 'datalogger', 'admin', 'settings'
   const [authView, setAuthView] = useState('login'); // 'login', 'register', 'forgot-password', 'reset-password'
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
-  const [apiUrl, setApiUrl] = useState('https://boxing-assembled-fell-expected.trycloudflare.com');
+  const [apiUrl, setApiUrl] = useState('http://localhost:8000');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(localStorage.getItem('sidebar_collapsed') === 'true');
 
   const toggleSidebar = () => {
@@ -112,23 +113,26 @@ function App() {
   // Hash-based router listener for SPA state synchronization
   useEffect(() => {
     const handleHashChange = () => {
-      const hash = window.location.hash || '#overview';
+      const rawHash = window.location.hash || '#overview';
+      const cleanHash = rawHash.split('?')[0].toLowerCase();
       
-      if (hash === '#overview') {
+      if (cleanHash === '#overview') {
         setViewMode('overview');
-      } else if (hash === '#graph' || hash === '#analytics') {
+      } else if (cleanHash === '#graph' || cleanHash === '#analytics') {
         setViewMode('graph');
-      } else if (hash === '#queue') {
+      } else if (cleanHash === '#queue') {
         setViewMode('queue');
-      } else if (hash === '#datalogger' || hash === '#inspector') {
+      } else if (cleanHash === '#datalogger' || cleanHash === '#inspector') {
         setViewMode('datalogger');
-      } else if (hash === '#admin') {
+      } else if (cleanHash === '#export' || cleanHash === '#dataexport' || cleanHash === '#data-export' || cleanHash === '#export-data') {
+        setViewMode('export');
+      } else if (cleanHash === '#admin') {
         if (user && !user.is_superuser) {
           setViewMode('not-found');
         } else {
           setViewMode('admin');
         }
-      } else if (hash === '#settings') {
+      } else if (cleanHash === '#settings') {
         setViewMode('settings');
       } else {
         setViewMode('not-found');
@@ -144,6 +148,7 @@ function App() {
     let mappedHash = mode;
     if (mode === 'graph') mappedHash = 'analytics';
     if (mode === 'datalogger') mappedHash = 'inspector';
+    if (mode === 'export') mappedHash = 'export';
     window.location.hash = '#' + mappedHash;
   };
 
@@ -665,6 +670,13 @@ function App() {
               endTime={inspectorEndTime}
               setEndTime={setInspectorEndTime}
               deviceIdsList={deviceIdsList}
+            />
+          )}
+
+          {viewMode === 'export' && (
+            <DataExport 
+              deviceIdsList={deviceIdsList}
+              showNotification={showNotification}
             />
           )}
 
