@@ -52,6 +52,10 @@ const DataExport = ({ deviceIdsList = [], showNotification }) => {
 
     const fetchPreview = async () => {
       setPreviewLoading(true);
+      if (isSubscribed) {
+        setPreviewCount(0);
+        setPreviewRecords([]);
+      }
       try {
         const params = {
           page: 1,
@@ -115,22 +119,12 @@ const DataExport = ({ deviceIdsList = [], showNotification }) => {
 
   return (
     <div className="data-export-container" style={{ padding: '1rem 0' }}>
-      {/* Header Section */}
-      <div style={{ marginBottom: '2rem' }}>
-        <h2 style={{ fontSize: '1.75rem', fontWeight: 700, margin: '0 0 0.5rem 0' }}>
-          Data Export Center
-        </h2>
-        <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '0.95rem' }}>
-          Download parsed BLE sensor node telemetry and 3D spatial logs as structured CSV data.
-        </p>
-      </div>
-
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
         
         {/* Filter Configuration Card */}
         <div className="glassmorphism" style={{ padding: '1.75rem', borderRadius: '16px', border: '1px solid var(--card-border)' }}>
           <h3 style={{ fontSize: '1.1rem', fontWeight: 600, margin: '0 0 1.25rem 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>⚡ Export Parameters</span>
+            <span>Export Parameters</span>
           </h3>
 
           {/* Device ID Selection */}
@@ -152,7 +146,7 @@ const DataExport = ({ deviceIdsList = [], showNotification }) => {
                 outline: 'none'
               }}
             >
-              <option value="All">🌐 All Registered Device Nodes</option>
+              <option value="All">All Registered Device Nodes</option>
               {deviceIdsList.map(id => (
                 <option key={id} value={id}>Device Tag #{id}</option>
               ))}
@@ -281,7 +275,7 @@ const DataExport = ({ deviceIdsList = [], showNotification }) => {
         {/* Granularity & Format Selector Card */}
         <div className="glassmorphism" style={{ padding: '1.75rem', borderRadius: '16px', border: '1px solid var(--card-border)', display: 'flex', flexDirection: 'column' }}>
           <h3 style={{ fontSize: '1.1rem', fontWeight: 600, margin: '0 0 1.25rem 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>📊 Select Data Granularity</span>
+            <span>Select Data Granularity</span>
           </h3>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1, marginBottom: '1.5rem' }}>
@@ -385,8 +379,9 @@ const DataExport = ({ deviceIdsList = [], showNotification }) => {
         </div>
 
         {previewLoading ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-            Loading export dataset preview...
+          <div style={{ padding: '3rem 0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '15px', color: 'var(--text-secondary)' }}>
+            <div className="loader"></div>
+            <div>Loading export dataset preview...</div>
           </div>
         ) : previewCount === 0 ? (
           <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
