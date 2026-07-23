@@ -33,6 +33,7 @@ const Header = ({
           {viewMode === 'graph' && 'Analytics'}
           {viewMode === 'queue' && 'Queue Monitor'}
           {viewMode === 'datalogger' && 'Log Inspector'}
+          {viewMode === 'export' && 'Data Export Center'}
           {viewMode === 'admin' && 'Access Controls'}
           {viewMode === 'settings' && 'Settings'}
         </h1>
@@ -41,6 +42,7 @@ const Header = ({
           {viewMode === 'graph' && `Live telemetry stream`}
           {viewMode === 'queue' && `${rawPackets.length} enqueued packets`}
           {viewMode === 'datalogger' && `${packets.filter(p => p.type === 'DataLogger').length} parsed logs`}
+          {viewMode === 'export' && `Export BLE telemetry & spatial logs as CSV`}
           {viewMode === 'admin' && `Manage user privileges`}
           {viewMode === 'settings' && `API configuration`}
         </p>
