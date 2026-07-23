@@ -35,7 +35,7 @@ function App() {
   const [viewMode, setViewMode] = useState('overview'); // 'overview', 'graph', 'queue', 'datalogger', 'admin', 'settings'
   const [authView, setAuthView] = useState('login'); // 'login', 'register', 'forgot-password', 'reset-password'
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
-  const [apiUrl, setApiUrl] = useState('https://ble-sensor.onrender.com');
+  const [apiUrl, setApiUrl] = useState('http://localhost:8000');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(localStorage.getItem('sidebar_collapsed') === 'true');
 
   const toggleSidebar = () => {
@@ -189,9 +189,13 @@ function App() {
   }, [token, apiUrl]);
 
   // Fetch BLE Packets from the backend based on current active view
-  const fetchPackets = async () => {
+  const fetchPackets = async (isBackground = false) => {
     if (!token) return;
     try {
+      if (!isBackground) {
+        setLoadingPackets(true);
+        setPackets([]);
+      }
       if (viewMode === 'overview' || viewMode === 'graph') {
         // For Overview / Graph, fetch paginated general packets (which include DataLogger)
         // If graph mode, we might want a larger limit (e.g. 100) or let it use default limit
@@ -324,10 +328,13 @@ function App() {
     }
   };
 
-  const fetchRawPackets = async () => {
+  const fetchRawPackets = async (isBackground = false) => {
     if (!token || viewMode !== 'queue') return;
     try {
-      setQueueLoading(true);
+      if (!isBackground) {
+        setQueueLoading(true);
+        setRawPackets([]);
+      }
       const params = {
         page: queuePage,
         limit: 10,
@@ -368,7 +375,8 @@ function App() {
   useEffect(() => {
     if (token) {
       if (viewMode === 'overview' || viewMode === 'graph') {
-        fetchPackets();
+        setSelectedSensor(null); // Clear selected sensor detail when filters/view changes
+        fetchPackets(false);
       }
     }
   }, [
@@ -391,7 +399,8 @@ function App() {
   useEffect(() => {
     if (token) {
       if (viewMode === 'datalogger') {
-        fetchPackets();
+        setSelectedDlPacket(null); // Clear selected datalogger packet when filters change
+        fetchPackets(false);
       }
     }
   }, [
@@ -411,7 +420,7 @@ function App() {
   useEffect(() => {
     if (token) {
       if (viewMode === 'queue') {
-        fetchRawPackets();
+        fetchRawPackets(false);
       }
     }
   }, [
@@ -452,9 +461,9 @@ function App() {
       if (document.hidden || !document.hasFocus()) return;
 
       if (viewMode === 'overview' || viewMode === 'graph' || viewMode === 'datalogger') {
-        fetchPacketsRef.current();
+        fetchPacketsRef.current(true);
       } else if (viewMode === 'queue') {
-        fetchRawPacketsRef.current();
+        fetchRawPacketsRef.current(true);
       }
     }, 5000);
     return () => clearInterval(interval);
@@ -466,9 +475,9 @@ function App() {
     const handleFocusOrVisible = () => {
       if (!document.hidden && document.hasFocus()) {
         if (viewMode === 'overview' || viewMode === 'graph' || viewMode === 'datalogger') {
-          fetchPacketsRef.current();
+          fetchPacketsRef.current(true);
         } else if (viewMode === 'queue') {
-          fetchRawPacketsRef.current();
+          fetchRawPacketsRef.current(true);
         }
       }
     };
@@ -651,6 +660,7 @@ function App() {
           {viewMode === 'datalogger' && (
             <DataLoggerViewer 
               packets={packets}
+              loadingPackets={loadingPackets}
               selectedDlPacket={selectedDlPacket}
               setSelectedDlPacket={setSelectedDlPacket}
               showNotification={showNotification}

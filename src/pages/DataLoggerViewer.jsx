@@ -15,6 +15,7 @@ import ExportProgressModal from '../components/ExportProgressModal';
 
 const DataLoggerViewer = ({
   packets,
+  loadingPackets,
   selectedDlPacket,
   setSelectedDlPacket,
   showNotification,
@@ -115,6 +116,15 @@ const DataLoggerViewer = ({
 
   const paginatedPackets = dataloggerPackets;
   const totalPages = Math.ceil(totalRecords / itemsPerPage) || 1;
+
+  if (loadingPackets) {
+    return (
+      <div className="telemetry-loading glassmorphism" style={{ padding: '8rem 2rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '15px' }}>
+        <div className="loader"></div>
+        <p>Loading spatial logs registry...</p>
+      </div>
+    );
+  }
 
   if (totalRecords === 0) {
     return (
