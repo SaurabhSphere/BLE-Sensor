@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import SensorCard from '../components/SensorCard';
+import { downloadCsvExport } from '../api';
+import ExportProgressModal from '../components/ExportProgressModal';
 
 const SENSOR_CATEGORIES = [
   'All', 'DataLogger'
@@ -32,6 +34,31 @@ const Overview = ({
   setEndTime,
   deviceIdsList = []
 }) => {
+  // Progress Modal States
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalDone, setModalDone] = useState(false);
+  const [modalError, setModalError] = useState(null);
+
+  const handleOverviewExport = async () => {
+    try {
+      setModalError(null);
+      setModalDone(false);
+      setModalOpen(true);
+
+      await downloadCsvExport({
+        deviceId: selectedDeviceId !== 'All' ? selectedDeviceId : undefined,
+        startTime: startTime ? new Date(startTime).toISOString() : undefined,
+        endTime: endTime ? new Date(endTime).toISOString() : undefined,
+        exportType: 'packets',
+        sortOrder: sortOrder
+      });
+      setModalDone(true);
+    } catch (err) {
+      console.error("Overview export error:", err);
+      setModalError("Export download failed.");
+    }
+  };
+
   // Stats grid packets filtering using statsPackets (overall latest unfiltered by page)
   const filteredByApp = selectedAppId === 'All'
     ? statsPackets
@@ -82,7 +109,7 @@ const Overview = ({
       ) : (
         <>
           {/* Metrics Cards Grid */}
-          <div className="stats-grid">
+          {/* <div className="stats-grid">
             {filteredLatest.map(p => (
               <SensorCard
                 key={p.id}
@@ -92,7 +119,7 @@ const Overview = ({
                 onClick={() => setSelectedSensor(p)}
               />
             ))}
-          </div>
+          </div> */}
 
           {/* Recents Table Feed */}
           <section className="data-section">
@@ -184,6 +211,32 @@ const Overview = ({
                     Reset Filters
                   </button>
                 )}
+
+                {/* Quick Export CSV Button */}
+                <button
+                  onClick={handleOverviewExport}
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(0, 210, 180, 0.2) 0%, rgba(0, 168, 150, 0.2) 100%)',
+                    color: 'var(--accent-teal)',
+                    border: '1px solid var(--accent-teal)',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                  title="Quick export packet logs with current filters to CSV"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  Export CSV
+                </button>
 
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 'auto' }}>
                   Found: <strong>{totalRecords}</strong>
@@ -293,6 +346,16 @@ const Overview = ({
           </section>
         </>
       )}
+
+      {/* Export Progress Animation Modal */}
+      <ExportProgressModal 
+        isOpen={modalOpen}
+        totalCount={totalRecords}
+        exportType="packets"
+        isDone={modalDone}
+        error={modalError}
+        onClose={() => setModalOpen(false)}
+      />
     </>
   );
 };
